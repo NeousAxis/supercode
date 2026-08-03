@@ -1,0 +1,34 @@
+# Veille IA sur Hacker News.
+# Montre les cinq briques du langage : effets journalisés, abstraction décrite
+# une fois, appel au modèle typé, budget, point d'arrêt humain.
+
+# Une abstraction décrite en une phrase. Au premier appel elle devient du code,
+# testé puis mis en cache. Ensuite elle ne coûte plus rien.
+skill domaine(url: text) -> text {
+  "renvoie le nom de domaine d'une URL, sans le préfixe www. Renvoie une chaîne vide si l'URL est vide ou invalide."
+}
+
+mission veille {
+  uses net.get("https://hacker-news.firebaseio.com/**"), file.write("out/**")
+  budget 1.00usd, 60 steps, 3min
+  every 6h
+
+  let ids     = !net.get("https://hacker-news.firebaseio.com/v0/topstories.json") retry 3 timeout 15s
+  let top     = slice(ids, 0, 10)
+  let stories = top map !net.get("https://hacker-news.firebaseio.com/v0/item/{it}.json") retry 2 timeout 10s
+  let entrees = stories map { titre: .title, url: .url }
+
+  let picks = ~"Garde uniquement les articles qui parlent d'intelligence artificielle, de modèles de langage ou d'agents. Pour chacun, explique en une phrase courte pourquoi il est intéressant."
+              (entrees) as list<{titre: text, url: text, pourquoi: text}>
+
+  if len(picks) == 0 {
+    log "rien sur l'IA dans le top 10 pour le moment."
+    done
+  }
+
+  let lignes  = picks map "- **{.titre}** _({domaine(.url)})_ — {.pourquoi}\n  {.url}"
+  let rapport = "# Veille IA — {now()}\n\n" + join(lignes, "\n")
+
+  confirm !file.write("out/veille.md", rapport)
+  log "rapport écrit : {len(picks)} article(s) retenus."
+}

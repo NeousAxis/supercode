@@ -1,0 +1,19 @@
+{
+  "name": "supercode",
+  "version": "0.1.0",
+  "description": "Super Code — un langage de missions pour agents : super simple, super rapide, super léger.",
+  "type": "module",
+  "bin": {
+    "super": "./bin/super.mjs"
+  },
+  "engines": {
+    "node": ">=22.6"
+  },
+  "scripts": {
+    "check": "node src/cli.ts check missions/veille.sup",
+    "demo": "node src/cli.ts run missions/veille.sup",
+    "test": "node test/run.ts"
+  },
+  "license": "MIT",
+  "private": true
+}

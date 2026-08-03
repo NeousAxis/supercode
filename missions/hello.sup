@@ -1,0 +1,8 @@
+# La plus petite mission possible : pas d'effet, pas de modèle, pas de budget.
+
+mission hello {
+  let noms = ["Cyril", "Super", "toi"]
+  let longs = noms where len(it) > 3
+  log "salut {join(longs, ", ")} — {len(longs)} sur {len(noms)}"
+  log "calcul : {2 + 3 * 4}"
+}

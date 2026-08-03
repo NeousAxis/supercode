@@ -1,0 +1,30 @@
+# Audit d'un dépôt, fichier par fichier, jusqu'à ce que l'objectif soit atteint.
+#
+# Montre les trois briques ajoutées : le graphe de fichiers comme index de
+# travail, la boucle qui s'arrête sur un objectif, et le budget qui la borne
+# même si l'objectif n'est jamais atteint.
+
+mission audit {
+  uses fs.graph("src/**"), file.read("src/**"), file.write("out/**")
+  budget 1.00usd, 60 steps, 5min
+
+  let g        = !fs.graph("src/**")
+  let restants = g.fichiers where .ext == ".ts" map .chemin
+  let notes    = []
+
+  log "{len(restants)} fichier(s) à examiner, {len(g.liens)} lien(s) d'import."
+
+  repeat {
+    let cible  = restants[0]
+    let code   = !file.read(cible)
+    let risque = ~"Tu relis un fichier source. En UNE phrase, donne le principal risque, défaut ou fragilité de ce fichier. Sois concret et technique."
+                 (cible, slice(code, 0, 6000)) as text
+    let notes    = notes + ["- **{cible}** — {risque}"]
+    let restants = slice(restants, 1, len(restants))
+    log "reste {len(restants)}"
+  } until len(restants) == 0
+
+  let rapport = "# Audit de src/ — {now()}\n\n" + join(notes, "\n")
+  confirm !file.write("out/audit.md", rapport)
+  log "audit écrit : {len(notes)} fichier(s)."
+}
