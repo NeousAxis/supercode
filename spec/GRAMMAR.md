@@ -156,10 +156,23 @@ escape would find no key there.
 | `!file.read(path)` | `file.read("pattern")` | text |
 | `!file.write(path, content)` | `file.write("pattern")` | the path written |
 | `!file.append(path, content)` | `file.append("pattern")` | the path written |
+| `!super.run(file, mission?)` | `super.run("pattern")` | `{fichier, mission, statut, runId, logs, erreur}` |
 
 Rule with no exception: an effect `!ns.op(...)` requires the capability `ns.op`.
 Patterns accept `*` (one segment) and `**` (everything else), and are matched
 against the effect's first argument.
+
+`!super.run` launches **another mission**, which is what makes orchestration
+possible inside the language rather than in a script beside it. The child is a
+full run: its own journal, its own budget, its own capabilities. The parent
+spends a single step.
+
+`statut` is one of `terminée`, `en_attente_approbation`, `échouée`. **A hold in
+the child is not an error, it is a result**, and a child that fails is a value
+the parent can read rather than a crash that takes it down.
+
+Nesting depth is bounded at three: a mission that relaunches itself forever
+stops with a clear message instead of exhausting the machine.
 
 ## 9. Numbers, comparisons, records
 

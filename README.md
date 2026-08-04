@@ -115,6 +115,38 @@ let r = !net.post("https://api.example.com/hook", { message: content }) retry 2 
 The body goes out as JSON, or as text if you pass text. An optional third
 argument carries headers. Slack, Notion, your own backend, webhooks.
 
+### `!super.run` — one mission launches another
+
+```
+let r = !super.run("direction.sup")
+if r.statut == "en_attente_approbation" {
+  log "direction is waiting for your approval on {r.runId}"
+}
+```
+
+This is the effect that makes **orchestration** possible inside the language
+rather than in a script beside it. An agent can decide which missions must run,
+in what order, and read what they produced.
+
+The child is a full run: its own journal, its own budget, its own capabilities.
+The parent spends a single step and receives a record:
+`{fichier, mission, statut, runId, logs, erreur}`.
+
+Three guardrails, because an effect that spawns processes is the most dangerous
+one in the table:
+
+1. **`uses super.run("pattern")`** filters which files may be launched, as
+   everywhere else. What is not declared is refused.
+2. **Depth is bounded at three.** A mission that relaunches itself forever stops
+   with a clear message instead of exhausting the machine.
+3. **A child's failure is a value, not a crash.** The parent reads
+   `statut == "échouée"` and decides what to do. A hold in the child yields
+   `en_attente_approbation`: orchestrating a mission that needs human approval
+   does not break the chain.
+
+The effect is journalled like the others, so a resume does not relaunch a child
+that already ran.
+
 ### `!fs.graph` gives you an index of files to walk
 
 ```

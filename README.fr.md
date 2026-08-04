@@ -94,6 +94,38 @@ let r = !net.post("https://api.exemple.com/hook", { message: contenu }) retry 2 
 Le corps part en JSON, ou en texte si tu passes du texte. Troisième argument
 optionnel pour les en-têtes. Slack, Notion, ton propre backend, les webhooks.
 
+### `!super.run` — une mission en lance une autre
+
+```
+let r = !super.run("direction.sup")
+if r.statut == "en_attente_approbation" {
+  log "la direction attend ton approbation sur {r.runId}"
+}
+```
+
+C'est l'effet qui rend l'**orchestration** possible dans le langage, plutôt que
+dans un script posé à côté. Un agent peut décider quelles missions doivent
+tourner, dans quel ordre, et lire ce qu'elles ont produit.
+
+Le fils est un run à part entière : son propre journal, son propre budget, ses
+propres capacités. Le père ne dépense qu'une étape et reçoit une fiche :
+`{fichier, mission, statut, runId, logs, erreur}`.
+
+Trois garde-fous, parce qu'un effet qui lance des processus est le plus dangereux
+de la table :
+
+1. **`uses super.run("motif")`** filtre les fichiers lançables, comme partout.
+   Ce qui n'est pas déclaré est refusé.
+2. **La profondeur est bornée à trois.** Une mission qui se relance sans fin
+   s'arrête avec un message clair au lieu d'épuiser la machine.
+3. **Un échec du fils est une valeur, pas un plantage.** Le père lit
+   `statut == "échouée"` et décide quoi en faire. Et un point d'arrêt dans le
+   fils rend `en_attente_approbation` : orchestrer une mission qui demande une
+   approbation humaine n'interrompt pas la chaîne.
+
+L'effet est journalisé comme les autres, donc une reprise ne relance pas un fils
+déjà passé.
+
 ### `!fs.graph` — un index de fichiers à parcourir
 
 ```

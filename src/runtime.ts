@@ -424,6 +424,12 @@ export type EffectContext = {
   budget: Budget;
   journal: Journal;
   cwd: string;
+  /** Dossier d'état, transmis au fils par « !super.run » pour qu'un run
+   *  orchestré vive dans le même journal que celui qui l'a lancé. */
+  dir: string;
+  /** Nom du fournisseur de modèle, hérité par un run orchestré : une mission
+   *  lancée par une autre ne doit pas changer de modèle en route. */
+  providerName: string;
 };
 
 export async function runEffect(
@@ -480,6 +486,9 @@ async function doEffect(ctx: EffectContext, ns: string, op: string, args: any[])
     if (ct.includes('json')) { try { return JSON.parse(texte); } catch { return texte; } }
     return texte;
   }
+  if (ns === 'super' && op === 'run') {
+    return runMissionAsEffect(ctx, String(args[0]), args[1] == null ? null : String(args[1]));
+  }
   if (ns === 'fs' && op === 'graph') return buildGraph(ctx.cwd, String(args[0]));
   if (ns === 'file' && op === 'read') {
     return fs.readFile(path.resolve(ctx.cwd, String(args[0])), 'utf8');
@@ -493,6 +502,80 @@ async function doEffect(ctx: EffectContext, ns: string, op: string, args: any[])
     return String(args[0]);
   }
   throw new SuperError(`effet inconnu : !${ns}.${op}`, 'SYNTAX_ERROR');
+}
+
+/**
+ * « !super.run » — une mission en lance une autre.
+ *
+ * C'est l'effet qui rend l'orchestration possible dans le langage lui-même,
+ * plutôt que dans un script à côté. Le fils est un run à part entière : son
+ * propre journal, son propre budget, ses propres capacités. Le père ne dépense
+ * qu'une étape et reçoit une fiche décrivant ce qui s'est passé.
+ *
+ * Trois garde-fous, parce qu'un effet qui lance des processus est le plus
+ * dangereux de la table :
+ *
+ *  1. « uses super.run("motif") » filtre les fichiers lançables, comme partout.
+ *  2. La profondeur voyage dans l'environnement du fils. Une mission qui se
+ *     relance elle-même s'arrête au troisième niveau au lieu d'épuiser la
+ *     machine, et le message le dit.
+ *  3. L'effet est journalisé comme les autres, donc une reprise ne relance pas
+ *     un fils déjà passé.
+ *
+ * Un point d'arrêt dans le fils n'est pas une erreur : c'est un résultat, rendu
+ * comme « en_attente_approbation ». L'orchestrateur peut donc lancer une mission
+ * qui demande une approbation humaine sans que la chaîne entière échoue.
+ */
+const PROFONDEUR_MAX = 3;
+
+async function runMissionAsEffect(ctx: EffectContext, fichier: string, mission: string | null): Promise<any> {
+  const profondeur = Number(process.env.SUPER_DEPTH ?? '0');
+  if (profondeur >= PROFONDEUR_MAX) {
+    throw new SuperError(
+      `orchestration trop profonde : ${profondeur} niveaux déjà empilés, boucle probable. ` +
+      `Une mission ne peut pas se relancer indéfiniment.`,
+      'EFFECT_FAILED',
+    );
+  }
+
+  const { spawn } = await import('node:child_process');
+  const { fileURLToPath } = await import('node:url');
+  const cli = fileURLToPath(new URL('./cli.ts', import.meta.url));
+  const argv = [
+    cli, 'run', fichier,
+    ...(mission ? [mission] : []),
+    '--provider', ctx.providerName,
+    '--dir', ctx.dir,
+  ];
+
+  return new Promise((resolve, reject) => {
+    const enfant = spawn(process.execPath, argv, {
+      cwd: ctx.cwd,
+      env: { ...process.env, SUPER_DEPTH: String(profondeur + 1) },
+    });
+    let sortie = '', erreurs = '';
+    enfant.stdout.on('data', (b) => { sortie += String(b); });
+    enfant.stderr.on('data', (b) => { erreurs += String(b); });
+    enfant.on('error', (e) => reject(new SuperError(`!super.run n'a pas pu démarrer : ${e.message}`, 'EFFECT_FAILED')));
+    enfant.on('close', (code) => {
+      const propre = sortie.replace(/\x1b\[[0-9;]*m/g, '');
+      const runId = (propre.match(/run (\d{8}-\d{6}-\w+)/) ?? [])[1] ?? '';
+      const logs = propre.split('\n')
+        .filter((l) => l.startsWith('  '))
+        .map((l) => l.trim())
+        .filter(Boolean);
+      // 0 : terminée · 10 : arrêtée sur un « confirm » · le reste : échec.
+      const statut = code === 0 ? 'terminée' : code === 10 ? 'en_attente_approbation' : 'échouée';
+      resolve({
+        fichier,
+        mission: mission ?? '',
+        statut,
+        runId,
+        logs,
+        erreur: code === 0 || code === 10 ? null : (propre + erreurs).trim().slice(-400),
+      });
+    });
+  });
 }
 
 const IGNORE = new Set(['node_modules', '.git', '.super', 'out', 'dist', 'build', '.next', 'coverage']);

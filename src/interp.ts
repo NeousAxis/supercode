@@ -41,7 +41,11 @@ export async function runMission(program: Program, missionName: string | null, o
   const caps = new Capabilities(mission.uses);
   const budget = new Budget(mission.budget);
   const journal = new Journal(opts.dir, opts.runId);
-  const ctx: EffectContext = { caps, budget, journal, cwd: opts.cwd };
+  const ctx: EffectContext = {
+    caps, budget, journal, cwd: opts.cwd,
+    dir: opts.dir,
+    providerName: opts.provider.name,
+  };
   const skills = new SkillRegistry(opts.dir, opts.provider, ctx, opts.diag);
 
   const skillDefs = new Map<string, SkillDef>(program.skills.map((s: Node) => [s.name, s as SkillDef]));
