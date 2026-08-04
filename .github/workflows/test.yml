@@ -13,16 +13,23 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      # Aucune dépendance à installer : Node exécute le TypeScript directement.
-      - name: tests de l'implémentation
+
+      # Aucune dépendance a installer : Node execute le TypeScript directement.
+      - name: tests de l'implementation de reference
         run: node test/run.ts
 
-      # La suite de conformité teste le LANGAGE, pas une implémentation.
-      # Elle tourne contre les deux, qui ne partagent pas une ligne de code.
-      - name: conformité — implémentation Node
+      # La suite de conformite teste le LANGAGE, pas une implementation.
+      # Elle tourne contre trois implementations qui ne partagent pas une ligne.
+      - name: conformite - Node (niveaux 1 et 2)
         run: node conformance/run.mjs
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: conformité — implémentation Python
-        run: node conformance/run.mjs --cmd "python3 conformance/reference-python/super.py conform"
+      - name: conformite - Python (niveau 1)
+        run: node conformance/run.mjs --niveau 1 --cmd "python3 conformance/reference-python/super.py conform"
+
+      - name: compilation Rust
+        run: cargo build --release --manifest-path conformance/reference-rust/Cargo.toml
+      - name: conformite - Rust (niveau 1)
+        run: node conformance/run.mjs --niveau 1 --cmd "conformance/reference-rust/target/release/super-rs conform"

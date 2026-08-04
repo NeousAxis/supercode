@@ -1,0 +1,7 @@
+mission m {
+  log "{"10" < "9"}"
+  log "{null == false}"
+  log "{0 == ""}"
+  log "{[1] == 1}"
+  log "{1 < "a"}"
+}

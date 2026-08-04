@@ -1,0 +1,7 @@
+mission m {
+  uses file.append("suite.txt"), file.read("suite.txt")
+  let a = !file.append("suite.txt", "1")
+  let b = !file.append("suite.txt", "2")
+  let c = !file.append("suite.txt", "3")
+  log "{!file.read("suite.txt")}"
+}

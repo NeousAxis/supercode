@@ -1,0 +1,6 @@
+{
+  "niveau": 2,
+  "logs": ["contenu = x"],
+  "error": null,
+  "files": { "compteur.txt": "x" }
+}

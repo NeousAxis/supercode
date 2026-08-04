@@ -544,6 +544,13 @@ def texte_de(v):
     return json.dumps(normaliser(v), ensure_ascii=False, separators=(",", ":"))
 
 
+def fini(v, op):
+    """Il n'existe ni infini ni « pas un nombre » dans Super Code."""
+    if v != v or v in (float("inf"), float("-inf")):
+        raise SuperError(f"« {op} » ne donne pas un nombre fini", "ARITHMETIC_ERROR")
+    return v
+
+
 def vrai(v):
     if v is None or v is False:
         return False
@@ -713,24 +720,32 @@ class Interprete:
                 return a + b
             if isinstance(a, str) or isinstance(b, str):
                 return texte_de(a) + texte_de(b)
-            return nombre(a) + nombre(b)
+            return fini(nombre(a) + nombre(b), op)
         if op == "-":
-            return nombre(a) - nombre(b)
+            return fini(nombre(a) - nombre(b), op)
         if op == "*":
-            return nombre(a) * nombre(b)
+            return fini(nombre(a) * nombre(b), op)
         if op == "/":
-            return nombre(a) / nombre(b)
+            if nombre(b) == 0:
+                raise SuperError("division par zéro", "ARITHMETIC_ERROR")
+            return fini(nombre(a) / nombre(b), op)
         if op == "==":
             return json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
         if op == "!=":
             return json.dumps(a, sort_keys=True) != json.dumps(b, sort_keys=True)
-        if op == "<":
-            return a < b
-        if op == ">":
-            return a > b
-        if op == "<=":
-            return a <= b
-        if op == ">=":
+        if op in ("<", ">", "<=", ">="):
+            # Ordonner deux valeurs de natures différentes n'a pas de sens.
+            meme = ((isinstance(a, (int, float)) and not isinstance(a, bool)
+                     and isinstance(b, (int, float)) and not isinstance(b, bool))
+                    or (isinstance(a, str) and isinstance(b, str)))
+            if not meme:
+                raise SuperError(f"« {op} » compare deux nombres ou deux textes", "TYPE_ERROR")
+            if op == "<":
+                return a < b
+            if op == ">":
+                return a > b
+            if op == "<=":
+                return a <= b
             return a >= b
         raise SuperError(f"opérateur inconnu : {op}", "INTERNAL")
 

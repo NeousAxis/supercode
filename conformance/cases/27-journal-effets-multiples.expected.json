@@ -1,0 +1,6 @@
+{
+  "niveau": 2,
+  "logs": ["123"],
+  "error": null,
+  "files": { "suite.txt": "123" }
+}

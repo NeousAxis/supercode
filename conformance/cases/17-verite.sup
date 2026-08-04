@@ -1,0 +1,8 @@
+mission m {
+  if 0 { log "zéro vrai" } else { log "zéro faux" }
+  if "" { log "vide vrai" } else { log "vide faux" }
+  if [] { log "liste vide vraie" } else { log "liste vide fausse" }
+  if null { log "null vrai" } else { log "null faux" }
+  if [0] { log "liste non vide vraie" } else { log "liste non vide fausse" }
+  if "0" { log "texte zéro vrai" } else { log "texte zéro faux" }
+}

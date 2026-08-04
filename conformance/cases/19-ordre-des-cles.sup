@@ -1,0 +1,5 @@
+mission m {
+  let f = {zebre: 1, alpha: 2, milieu: 3}
+  log "{join(keys(f), ",")}"
+  log "{to_json(f)}"
+}

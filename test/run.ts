@@ -41,6 +41,7 @@ async function run(src: string, opts: { fixtures?: Record<string, string>; autoA
     provider: new FixtureProvider(fixturesFile),
     autoApprove: opts.autoApprove ?? true,
     log: (m) => logs.push(m),
+    diag: (m) => logs.push(m),
   });
   return { logs, result, dir };
 }

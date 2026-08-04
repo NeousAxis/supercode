@@ -1,0 +1,8 @@
+mission m {
+  let f = {a: 1}
+  let l = [10, 20]
+  log "[{f.inexistant}]"
+  log "[{l[9]}]"
+  log "[{l[-1]}]"
+  log "{len(slice(l, 0, 99))}"
+}

@@ -1,0 +1,8 @@
+# Niveau 2 : ce cas tourne DEUX fois dans le même dossier.
+# La deuxième exécution doit rejouer son journal, donc n'ajouter aucun « x ».
+mission m {
+  uses file.append("compteur.txt"), file.read("compteur.txt")
+  let p = !file.append("compteur.txt", "x")
+  let contenu = !file.read("compteur.txt")
+  log "contenu = {contenu}"
+}

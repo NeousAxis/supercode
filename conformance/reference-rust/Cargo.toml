@@ -1,0 +1,11 @@
+[package]
+name = "super-rs"
+version = "0.1.0"
+edition = "2021"
+
+# Aucune dépendance : ni sérialisation, ni expressions régulières.
+# Une implémentation de Super Code doit tenir sur la bibliothèque standard.
+[dependencies]
+
+[profile.release]
+opt-level = 1

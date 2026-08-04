@@ -1,0 +1,8 @@
+mission m {
+  log "{2 + 3 * 4 - 6 / 2}"
+  log "{not true and false}"
+  log "{true or false and false}"
+  log "{1 < 2 == true}"
+  log "{-2 * -3}"
+  log "{[1,2,3] where it > 1 map it * 10 |> len}"
+}

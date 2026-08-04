@@ -27,6 +27,7 @@ const lire = (nom, defaut) => {
 
 const cmd = lire('cmd', `node ${path.join(ici, '..', 'src', 'cli.ts')} conform`);
 const filtre = lire('only', null);
+const niveauMax = Number(lire('niveau', '99'));
 const verbeux = args.includes('--verbose');
 
 const cas = readdirSync(casesDir)
@@ -44,19 +45,28 @@ console.log(`implémentation testée : ${cd(cmd)}\n`);
 
 let reussis = 0;
 const echecs = [];
+const ignores = [];
 
 for (const fichier of cas) {
   const nom = fichier.replace(/\.sup$/, '');
   const attendu = JSON.parse(readFileSync(path.join(casesDir, nom + '.expected.json'), 'utf8'));
 
   // Chaque cas tourne dans un dossier neuf : aucun cas n'en influence un autre.
+  const niveau = attendu.niveau ?? 1;
+  if (niveau > niveauMax) { ignores.push(nom); console.log(`  --  ${nom} (niveau ${niveau}, ignoré)`); continue; }
+
   const bac = mkdtempSync(path.join(tmpdir(), 'super-conf-'));
   copyFileSync(path.join(casesDir, fichier), path.join(bac, 'mission.sup'));
+
+  // Un cas de niveau 2 tourne DEUX fois dans le même dossier : la deuxième
+  // exécution doit rejouer son journal et ne refaire aucun effet.
+  const deuxFois = niveau >= 2;
 
   let obtenu;
   try {
     const brut = await lancer(cmd, path.join(bac, 'mission.sup'), bac);
     obtenu = JSON.parse(brut);
+    if (deuxFois) obtenu = JSON.parse(await lancer(cmd, path.join(bac, 'mission.sup'), bac));
   } catch (e) {
     echecs.push([nom, `sortie inexploitable : ${e.message.slice(0, 300)}`]);
     console.log(`  KO  ${nom}\n      sortie inexploitable : ${e.message.slice(0, 200)}`);
@@ -76,7 +86,8 @@ for (const fichier of cas) {
   }
 }
 
-console.log(`\n${reussis}/${cas.length} cas conformes.\n`);
+const testes = cas.length - ignores.length;
+console.log(`\n${reussis}/${testes} cas conformes${ignores.length ? `, ${ignores.length} ignoré(s) au-dessus du niveau ${niveauMax}` : ''}.\n`);
 if (echecs.length) process.exit(1);
 
 // ---------------------------------------------------------------- utilitaires

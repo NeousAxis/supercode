@@ -168,6 +168,56 @@ Super Code emits a program whose scope is declared (`uses`), whose cost is bound
 (`budget`), whose effects are replayable (`!`) and whose irreversible actions are
 blocked (`confirm`). You review fifteen declarative lines, not a script.
 
+## Is it a real language?
+
+A language is real when a **second implementation can exist and agree with the
+first**. Super Code has three, sharing no code, in three languages chosen to
+disagree:
+
+| Implementation | Language | Lines | Level |
+|---|---|---:|---|
+| `src/` | TypeScript on Node | 2 424 | 1 and 2 |
+| `conformance/reference-python/` | Python, stdlib only | 886 | 1 |
+| `conformance/reference-rust/` | Rust, no crates | 1 558 | 1 |
+
+All three pass the same suite, and CI runs all three on every push.
+
+Rust was picked on purpose. Node and Python resemble each other too much: one
+useful numeric type, ordered maps, native JSON. They agree by accident. Rust
+agrees by accident about nothing: integers and floats are distinct, a string is
+UTF-8 bytes, a `HashMap` has no order, and there is no null.
+
+### What three implementations found that one never could
+
+Every item below was a hole in the specification. Each was decided, written into
+`spec/GRAMMAR.md`, and locked in by a conformance case:
+
+| The question nobody had asked | Before | Now |
+|---|---|---|
+| Which capability does `!file.append` need? | spec said `file.write`, code said `file.append` | `!ns.op` needs `ns.op`, no exception |
+| How does an integral number serialise? | Python wrote `1.0`, Node wrote `1` | never a decimal part |
+| How long is `"👍"`? | 2 in Node (UTF-16), 1 in Python | a text is a sequence of **code points** |
+| Are `{a:1,b:2}` and `{b:2,a:1}` equal? | Node said no, comparing serialised text | equality is **structural** |
+| What is `1 / 0`? | `Infinity` in Node, a crash in Python, `inf` in Rust | there is no infinity: `ARITHMETIC_ERROR` |
+| What is `1 < "a"`? | `false` in Node and Rust, a crash in Python | ordering needs two numbers or two texts |
+| What is `{a: 1, a: 2}`? | Rust kept both fields | last value wins, first position kept |
+
+Three of those were found by a single case, `1 / 0`, where the three
+implementations gave three different answers. No amount of code review finds
+that. A second implementation does, in a minute.
+
+### Writing a fourth
+
+Read [`conformance/CONTRACT.md`](conformance/CONTRACT.md): one page. Provide a
+command that takes a `.sup` file and prints one JSON object. Then:
+
+```bash
+node conformance/run.mjs --niveau 1 --cmd "./your-implementation conform"
+```
+
+Adding a case is adding two files in `conformance/cases/`, and it becomes a
+constraint on every implementation, present and future.
+
 ## Model providers
 
 | `--provider` | Endpoint | Notes |
@@ -204,6 +254,7 @@ Node 22.6 or newer. Nothing to install.
 node src/cli.ts check missions/veille.sup   # syntax, capabilities, budget
 node src/cli.ts run   missions/hello.sup    # the smallest mission
 node test/run.ts                            # 24 tests, no network
+node conformance/run.mjs                    # 30 conformance cases
 ```
 
 Full offline demo, using recorded model responses:
@@ -232,6 +283,7 @@ export ANTHROPIC_API_KEY=... && node src/cli.ts run missions/veille.sup --provid
 | `super watch <f.sup>` | rerun the mission at its `every` interval |
 | `super approve <runId>` | approve the pending stop |
 | `super runs` | list runs and which ones await approval |
+| `super conform <f.sup>` | run one mission and print the conformance JSON |
 
 Options: `--provider`, `--model`, `--base-url`, `--fixtures`, `--resume`,
 `--yes`, `--dir`.
@@ -241,6 +293,7 @@ Options: `--provider`, `--model`, `--base-url`, `--fixtures`, `--resume`,
 Every claim below was run on a real machine, not reasoned about:
 
 - 24 tests, no network required;
+- 30 conformance cases, passed by three independent implementations;
 - real network effects (11 live calls to the Hacker News API) and their journaling;
 - resume: a resumed run replays its steps without repeating a single call;
 - the approval gate: the file is not written while approval is missing;
@@ -274,6 +327,7 @@ Every claim below was run on a real machine, not reasoned about:
 
 ```
 spec/GRAMMAR.md   the entire grammar, on one page (currently in French)
+conformance/      CONTRACT.md, the case suite, and two other implementations
 src/lexer.ts      lexing
 src/parser.ts     parsing
 src/interp.ts     interpreter

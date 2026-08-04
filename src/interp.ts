@@ -18,7 +18,12 @@ export type RunOptions = {
   runId: string;
   provider: ModelProvider;
   autoApprove: boolean;
+  /** Sortie du programme : uniquement les instructions « log ». */
   log: (msg: string) => void;
+  /** Sortie de diagnostic : reprises, synthèses, avertissements. Jamais mêlée
+   *  à la précédente, sinon deux implémentations ne pourraient pas être
+   *  comparées. */
+  diag: (msg: string) => void;
 };
 
 export type RunResult = {
@@ -37,15 +42,15 @@ export async function runMission(program: Program, missionName: string | null, o
   const budget = new Budget(mission.budget);
   const journal = new Journal(opts.dir, opts.runId);
   const ctx: EffectContext = { caps, budget, journal, cwd: opts.cwd };
-  const skills = new SkillRegistry(opts.dir, opts.provider, ctx, opts.log);
+  const skills = new SkillRegistry(opts.dir, opts.provider, ctx, opts.diag);
 
   const skillDefs = new Map<string, SkillDef>(program.skills.map((s: Node) => [s.name, s as SkillDef]));
 
   const interp = new Interp(ctx, opts, skills, skillDefs);
 
-  for (const w of journal.warnings) opts.log(`⚠ ${w}`);
+  for (const w of journal.warnings) opts.diag(`⚠ ${w}`);
   if (journal.replayedCount > 0) {
-    opts.log(`reprise du run ${opts.runId} : ${journal.replayedCount} étape(s) déjà faites, non refaites.`);
+    opts.diag(`reprise du run ${opts.runId} : ${journal.replayedCount} étape(s) déjà faites, non refaites.`);
   }
 
   try {
@@ -261,17 +266,33 @@ class Interp {
     }
     const a = await this.eval(n.left, scopes);
     const b = await this.eval(n.right, scopes);
+
+    // Ordonner deux valeurs de natures différentes n'a pas de sens. JavaScript
+    // répondrait « false » à « 1 < "a" », ce qui est une réponse inventée : on
+    // refuse plutôt que d'en choisir une au hasard.
+    if (['<', '>', '<=', '>='].includes(n.op)) {
+      const memeNature =
+        (typeof a === 'number' && typeof b === 'number') ||
+        (typeof a === 'string' && typeof b === 'string');
+      if (!memeNature) {
+        throw new SuperError(
+          `« ${n.op} » compare deux nombres ou deux textes, pas ${typeName(a)} et ${typeName(b)}`,
+          'TYPE_ERROR',
+        );
+      }
+    }
+
     switch (n.op) {
       case '+':
         // « + » assemble : deux listes, deux textes, ou deux nombres.
         if (Array.isArray(a) && Array.isArray(b)) return [...a, ...b];
         if (typeof a === 'string' || typeof b === 'string') return stringify(a) + stringify(b);
-        return Number(a) + Number(b);
-      case '-': return Number(a) - Number(b);
-      case '*': return Number(a) * Number(b);
-      case '/': return Number(a) / Number(b);
-      case '==': return JSON.stringify(a) === JSON.stringify(b);
-      case '!=': return JSON.stringify(a) !== JSON.stringify(b);
+        return fini(Number(a) + Number(b), n.op);
+      case '-': return fini(Number(a) - Number(b), n.op);
+      case '*': return fini(Number(a) * Number(b), n.op);
+      case '/': return fini(Number(a) / Number(b), n.op);
+      case '==': return egal(a, b);
+      case '!=': return !egal(a, b);
       case '<': return a < b;
       case '>': return a > b;
       case '<=': return a <= b;
@@ -314,6 +335,46 @@ function truthy(v: any): boolean {
   if (v === 0 || v === '') return false;
   if (Array.isArray(v)) return v.length > 0;
   return true;
+}
+
+/**
+ * Il n'existe pas de valeur infinie ni de « pas un nombre » dans Super Code.
+ *
+ * Une mission qui écrit « Infinity » dans un rapport est pire qu'une mission qui
+ * s'arrête : l'erreur se propage sans bruit jusqu'au destinataire. Tout calcul
+ * qui ne donne pas un nombre fini interrompt la mission.
+ */
+function fini(v: number, op: string): number {
+  if (!Number.isFinite(v)) {
+    throw new SuperError(
+      `« ${op} » ne donne pas un nombre fini (division par zéro, ou dépassement)`,
+      'ARITHMETIC_ERROR',
+    );
+  }
+  return v;
+}
+
+/**
+ * Égalité structurelle.
+ *
+ * Une fiche garde l'ordre de ses champs pour « keys » et « to_json », parce
+ * qu'une sortie prévisible vaut mieux qu'une sortie commode. Mais cet ordre ne
+ * doit rien changer à l'égalité : {a: 1, b: 2} et {b: 2, a: 1} portent la même
+ * information. Comparer du texte sérialisé confondait les deux notions.
+ */
+function egal(a: any, b: any): boolean {
+  if (a === b) return true;
+  if (a === null || b === null || a === undefined || b === undefined) return false;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((x, i) => egal(x, b[i]));
+  }
+  if (typeof a === 'object' && typeof b === 'object') {
+    const ka = Object.keys(a), kb = Object.keys(b);
+    if (ka.length !== kb.length) return false;
+    return ka.every((k) => k in b && egal(a[k], b[k]));
+  }
+  return false;
 }
 
 function typeName(v: any): string {

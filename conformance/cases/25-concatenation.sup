@@ -1,0 +1,7 @@
+mission m {
+  log "{1 + "a"}"
+  log "{"n=" + 42}"
+  log "{true + "!"}"
+  log "{null + "x"}"
+  log "{[1] + [] + [2]}"
+}

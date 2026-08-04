@@ -1,0 +1,7 @@
+mission m {
+  let groupes = [{nom: "a", vals: [1,2,3]}, {nom: "b", vals: [4]}]
+  log "{join(groupes map .nom, ",")}"
+  log "{join(groupes map len(.vals), ",")}"
+  let plats = groupes map join(.vals where it > 1 map text(it), "-")
+  log "{join(plats, " | ")}"
+}

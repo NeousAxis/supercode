@@ -170,6 +170,7 @@ async function cmdConform(file: string, flags: Flags) {
       provider: pickProvider({ provider: 'fixtures', fixtures: path.join(workdir, 'fixtures.json') }),
       autoApprove: true,
       log: (m) => logs.push(m),
+      diag: (m) => process.stderr.write(m + '\n'),
     });
     sortie = { logs, error: null, files: listerFichiers(workdir) };
   } catch (e) {
@@ -310,6 +311,7 @@ async function cmdRun(file: string, missionName: string | undefined, flags: Flag
     provider,
     autoApprove: flags.yes === true,
     log: (m) => console.log(`  ${m}`),
+    diag: (m) => console.log(C.dim(`  ${m}`)),
   });
 
   const pendingFile = path.join(dir, 'runs', `${runId}.pending.json`);

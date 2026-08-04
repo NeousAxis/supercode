@@ -1,0 +1,8 @@
+mission m {
+  log "guillemet \" et accolade \{ et antislash \\"
+  log "saut:\nligne"
+  log "{"a" < "b"} {"B" < "a"}"
+  log "{join(sort(["banane", "abricot", "cerise"]), ",")}"
+  log "{split("a,b,c", ",")[1]}"
+  log "{trim("  x  ")}|"
+}

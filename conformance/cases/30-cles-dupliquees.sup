@@ -1,0 +1,4 @@
+mission m {
+  let f = {a: 1, a: 2}
+  log "{len(f)} {f.a} {join(keys(f), ",")}"
+}

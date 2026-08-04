@@ -158,12 +158,30 @@ Règle sans exception : un effet `!ns.op(...)` exige la capacité `ns.op`. Les
 motifs acceptent `*` (un segment) et `**` (tout le reste), et sont comparés au
 premier argument de l'effet.
 
-## 9. Nombres
+## 9. Nombres, comparaisons, fiches
 
 Il n'y a qu'un seul type numérique. Un nombre dont la valeur est entière s'écrit
 **sans partie décimale**, partout : dans un texte interpolé, dans `to_json`, et
-dans toute sérialisation. `3 / 1` s'écrit `3`, jamais `3.0`. Sans cette règle,
-deux implémentations correctes produiraient des sorties différentes.
+dans toute sérialisation. `3 / 1` s'écrit `3`, jamais `3.0`.
+
+**Il n'existe ni infini ni « pas un nombre ».** Tout calcul qui ne donne pas un
+nombre fini interrompt la mission avec `ARITHMETIC_ERROR`. `1 / 0` ne vaut pas
+`Infinity` : une mission qui écrit `Infinity` dans un rapport est pire qu'une
+mission qui s'arrête, parce que l'erreur voyage sans bruit jusqu'au lecteur.
+
+**`<`, `>`, `<=`, `>=` comparent deux nombres ou deux textes**, jamais deux
+natures différentes. `1 < "a"` est une `TYPE_ERROR`, pas un `false` inventé.
+
+**`==` et `!=` comparent la structure**, pas la sérialisation : `{a: 1, b: 2}`
+égale `{b: 2, a: 1}`. L'ordre des champs sert à l'affichage, pas à l'identité.
+
+**Une fiche garde l'ordre de ses champs** pour `keys` et `to_json`. Un champ
+répété remplace la valeur du précédent sans changer sa place : `{a: 1, b: 2, a: 3}`
+vaut `{a: 3, b: 2}`, dans cet ordre.
+
+Ces cinq règles ne sont pas du détail. Trois implémentations les ont d'abord
+enfreintes chacune à sa façon, et sans elles trois programmes corrects donnaient
+trois résultats différents.
 
 ## 10. Textes
 

@@ -59,6 +59,7 @@ langue, aussi détaillés que l'implémentation le souhaite. Seul le code l'est.
 | `SKILL_FAILED` | le code d'un skill a échoué ou a été refusé |
 | `MISSION_FAILED` | l'instruction `fail` |
 | `MODEL_FAILED` | le modèle n'a pas produit de valeur exploitable |
+| `ARITHMETIC_ERROR` | un calcul ne donne pas un nombre fini |
 | `INTERNAL` | tout le reste |
 
 ## Comportement attendu en mode conformité
@@ -70,12 +71,25 @@ langue, aussi détaillés que l'implémentation le souhaite. Seul le code l'est.
 - Le journal, les skills et l'état interne vont dans `<dir>/.super/`, qui est
   exclu de `files`.
 
+## Niveaux
+
+Chaque cas déclare un `niveau` dans son fichier d'attente (1 par défaut). Une
+implémentation partielle se mesure au niveau qu'elle vise, sans prétendre couvrir
+le reste :
+
+| Niveau | Contenu | Comment le runner le vérifie |
+|---|---|---|
+| 1 | sémantique pure, effets sur fichiers, capacités, budget, règles refusées à l'analyse | une exécution |
+| 2 | journal et reprise | **deux** exécutions dans le même dossier : la seconde doit rejouer son journal et ne refaire aucun effet |
+
+```bash
+node conformance/run.mjs --niveau 1 --cmd "./ma-super-implementation conform"
+```
+
 ## Ce que la suite ne couvre pas encore
 
-Elle vérifie la sémantique pure, les effets sur fichiers, les capacités, le
-budget et les règles refusées à l'analyse. Elle ne couvre pas :
+Elle ne couvre pas :
 
-- la reprise après crash et le journal, qui demandent deux exécutions ;
 - l'opérateur `~`, qui demande un modèle ;
 - `net.get` et `net.post`, qui demandent le réseau ;
 - la synthèse d'un skill et son bac à sable.

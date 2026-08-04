@@ -1,0 +1,7 @@
+mission m {
+  log "[{join([], ",")}]"
+  log "{len([])} {len({})} {len("")}"
+  log "{join([] map it * 2, ",")}|"
+  log "{to_json([])} {to_json({})}"
+  log "{sum([])}"
+}

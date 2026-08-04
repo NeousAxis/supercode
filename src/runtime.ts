@@ -27,6 +27,7 @@ export type ErrorCode =
   | 'SKILL_FAILED'        // le code d'un skill a échoué ou été refusé
   | 'MISSION_FAILED'      // l'instruction « fail »
   | 'MODEL_FAILED'        // le modèle n'a pas produit de valeur exploitable
+  | 'ARITHMETIC_ERROR'    // un calcul ne donne pas un nombre fini
   | 'INTERNAL';           // tout le reste
 
 export class SuperError extends Error {

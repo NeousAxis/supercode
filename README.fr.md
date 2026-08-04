@@ -169,6 +169,58 @@ produit un programme dont le périmètre est déclaré (`uses`), le coût borné
 (`budget`), les effets rejouables (`!`) et les actions irréversibles bloquées
 (`confirm`). La relecture porte sur quinze lignes déclaratives, pas sur un script.
 
+## Est-ce un vrai langage ?
+
+Un langage est réel quand une **deuxième implémentation peut exister et tomber
+d'accord avec la première**. Super Code en a trois, sans une ligne en commun,
+dans trois langages choisis pour ne pas être d'accord :
+
+| Implémentation | Langage | Lignes | Niveau |
+|---|---|---:|---|
+| `src/` | TypeScript sur Node | 2 424 | 1 et 2 |
+| `conformance/reference-python/` | Python, bibliothèque standard seule | 886 | 1 |
+| `conformance/reference-rust/` | Rust, aucune dépendance | 1 558 | 1 |
+
+Les trois passent la même suite, et la CI les lance toutes les trois à chaque
+poussée.
+
+Rust n'est pas là par hasard. Node et Python se ressemblent trop : un seul type
+numérique utile, des tables ordonnées, du JSON natif. Ils tombent d'accord par
+accident. Rust ne tombe d'accord sur rien par accident : entiers et flottants
+sont distincts, une chaîne est une suite d'octets UTF-8, une `HashMap` n'a pas
+d'ordre, et il n'y a pas de null.
+
+### Ce que trois implémentations ont trouvé, et qu'une seule ne pouvait pas voir
+
+Chaque ligne était un trou dans la spécification. Chacune a été tranchée, écrite
+dans `spec/GRAMMAR.md`, et verrouillée par un cas de conformité :
+
+| La question que personne n'avait posée | Avant | Maintenant |
+|---|---|---|
+| Quelle capacité exige `!file.append` ? | `file.write` dans la spec, `file.append` dans le code | `!ns.op` exige `ns.op`, sans exception |
+| Comment s'écrit un nombre entier ? | `1.0` en Python, `1` en Node | jamais de partie décimale |
+| Combien mesure `"👍"` ? | 2 en Node (UTF-16), 1 en Python | un texte est une suite de **points de code** |
+| `{a:1,b:2}` égale-t-il `{b:2,a:1}` ? | Node disait non, il comparait du texte sérialisé | l'égalité est **structurelle** |
+| Que vaut `1 / 0` ? | `Infinity` en Node, plantage en Python, `inf` en Rust | l'infini n'existe pas : `ARITHMETIC_ERROR` |
+| Que vaut `1 < "a"` ? | `false` en Node et Rust, plantage en Python | ordonner exige deux nombres ou deux textes |
+| Que vaut `{a: 1, a: 2}` ? | Rust gardait les deux champs | la dernière valeur gagne, à la première place |
+
+Trois de ces trous ont été révélés par un seul cas, `1 / 0`, où les trois
+implémentations ont donné trois réponses différentes. Aucune relecture ne trouve
+ça. Une deuxième implémentation le trouve en une minute.
+
+### Écrire la quatrième
+
+Lis [`conformance/CONTRACT.md`](conformance/CONTRACT.md) : une page. Fournis une
+commande qui prend un fichier `.sup` et écrit un objet JSON. Puis :
+
+```bash
+node conformance/run.mjs --niveau 1 --cmd "./ton-implementation conform"
+```
+
+Ajouter un cas, c'est ajouter deux fichiers dans `conformance/cases/`, et cela
+devient une contrainte pour toutes les implémentations, présentes et futures.
+
 ## Fournisseurs de modèle
 
 | `--provider` | Endpoint | Notes |
@@ -206,6 +258,7 @@ Node 22.6 ou plus récent. Aucune dépendance à installer.
 node src/cli.ts check missions/veille.sup       # vérifie syntaxe, capacités, budget
 node src/cli.ts run   missions/hello.sup        # la mission minimale
 node test/run.ts                                # 24 tests, sans réseau
+node conformance/run.mjs                        # 30 cas de conformité
 ```
 
 Démonstration complète, hors ligne, avec des réponses de modèle enregistrées :
@@ -240,6 +293,7 @@ node src/cli.ts run missions/veille.sup --provider cli
 | `super watch <f.sup> [mission]` | relance la mission à son intervalle `every` |
 | `super write "<demande>" -o <f.sup>` | fait écrire la mission par le modèle |
 | `super runs` | liste les runs et ceux qui attendent une approbation |
+| `super conform <f.sup>` | exécute une mission et écrit le JSON de conformité |
 | `super trust [--yes]` | ré-approuve le code des skills modifié après relecture |
 | `super approve <runId>` | approuve le point d'arrêt en attente |
 
@@ -251,6 +305,7 @@ Options : `--provider`, `--model`, `--base-url`, `--fixtures`, `--resume`,
 Vérifié de bout en bout sur cette machine :
 
 - l'analyse, l'interprétation, les 24 tests ;
+- 30 cas de conformité, passés par trois implémentations indépendantes ;
 - les effets réseau réels (11 appels à l'API Hacker News) et leur journalisation ;
 - la reprise : un run repris rejoue les étapes sans refaire un seul appel ;
 - le point d'arrêt : le fichier n'est pas écrit tant que l'approbation manque ;
@@ -297,6 +352,7 @@ src/parser.ts     analyse syntaxique
 src/interp.ts     interpréteur
 src/runtime.ts    journal, capacités, budget, effets, modèle, skills
 src/sandbox.ts    bac à sable isolé pour le code des skills
+conformance/      CONTRACT.md, la suite de cas, et deux autres implémentations
 src/cli.ts        ligne de commande
 test/run.ts       tests
 missions/         exemples exécutables
