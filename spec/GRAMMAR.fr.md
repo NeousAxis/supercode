@@ -156,10 +156,23 @@ environnement, donc même une évasion n'y trouverait aucune clé.
 | `!file.read(chemin)` | `file.read("motif")` | texte |
 | `!file.write(chemin, contenu)` | `file.write("motif")` | chemin écrit |
 | `!file.append(chemin, contenu)` | `file.append("motif")` | chemin écrit |
+| `!super.run(fichier, mission?)` | `super.run("motif")` | `{fichier, mission, statut, runId, logs, erreur}` |
 
 Règle sans exception : un effet `!ns.op(...)` exige la capacité `ns.op`. Les
 motifs acceptent `*` (un segment) et `**` (tout le reste), et sont comparés au
 premier argument de l'effet.
+
+`!super.run` lance une **autre mission**, et c'est ce qui rend l'orchestration
+possible dans le langage plutôt que dans un script à côté. Le fils est un run à
+part entière : son propre journal, son propre budget, ses propres capacités. Le
+père ne dépense qu'une étape.
+
+`statut` vaut `terminée`, `en_attente_approbation` ou `échouée`. **Un point
+d'arrêt dans le fils n'est pas une erreur, c'est un résultat**, et un fils qui
+échoue est une valeur que le père peut lire au lieu d'un plantage qui l'emporte.
+
+La profondeur d'empilement est bornée à trois : une mission qui se relance sans
+fin s'arrête avec un message clair au lieu d'épuiser la machine.
 
 ## 9. Nombres, comparaisons, fiches
 

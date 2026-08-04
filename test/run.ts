@@ -379,6 +379,41 @@ await test('un skill qui boucle sans fin est interrompu', async () => {
   await expectFailure(src, 'aucune fixture', { dir, runId: 'b1', fixtures });
 });
 
+// ---------------------------------------------------- !super.run
+// L'effet qui lance une autre mission est le plus dangereux de la table : il
+// crée des processus. On vérifie donc les trois garde-fous, pas seulement le
+// chemin heureux.
+
+await test('!super.run lance une mission et rend son statut, ses logs et son runId', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'super-orch-'));
+  writeFileSync(path.join(dir, 'enfant.sup'),
+    'mission enfant {\n  uses file.write("out/**")\n  log "l enfant travaille"\n  !file.write("out/e.txt", "fait")\n}');
+  const { logs } = await run(
+    'mission pere {\n  uses super.run("*.sup")\n  budget 20 steps, 1min\n' +
+    '  let r = !super.run("enfant.sup")\n  log "{r.statut}|{len(r.logs)}|{len(r.runId) > 0}"\n}',
+    { dir, runId: 'orch1' });
+  assertEq(logs, ['terminée|1|true'], 'le père doit voir le statut, les logs et le runId du fils :');
+  assert(existsSync(path.join(dir, 'out', 'e.txt')), "le fils doit avoir réellement écrit son fichier");
+});
+
+await test('!super.run respecte « uses » comme les autres effets', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'super-orch-cap-'));
+  writeFileSync(path.join(dir, 'enfant.sup'), 'mission enfant { log "coucou" }');
+  await expectFailure(
+    'mission pere {\n  uses super.run("autorise-*.sup")\n  let r = !super.run("enfant.sup")\n}',
+    'capacité refusée', { dir, runId: 'orch2' });
+});
+
+await test("un fils qui échoue est une valeur, pas un plantage du père", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'super-orch-echec-'));
+  writeFileSync(path.join(dir, 'casse.sup'), 'mission casse { fail "je casse" }');
+  const { logs } = await run(
+    'mission pere {\n  uses super.run("*.sup")\n  budget 10 steps, 1min\n' +
+    '  let r = !super.run("casse.sup")\n  log r.statut\n  log "le père continue"\n}',
+    { dir, runId: 'orch3' });
+  assertEq(logs, ['échouée', 'le père continue'], "l'échec du fils doit être lisible sans emporter le père :");
+});
+
 function shaFirstLine(line: string): string {
   return createHash('sha256').update(line).digest('hex').slice(0, 16);
 }
