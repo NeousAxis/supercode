@@ -1,10 +1,12 @@
 # Super Code
 
+[![tests](https://github.com/NeousAxis/supercode/actions/workflows/test.yml/badge.svg)](https://github.com/NeousAxis/supercode/actions/workflows/test.yml)
+
 **A language for agent missions.** Super simple, super fast, super light, and able
 to turn a complex abstraction described in one sentence into a permanent building
 block.
 
-*[Version française](README.fr.md)*
+*[Version française](README.fr.md)* · *[Grammar](spec/GRAMMAR.md)* · *[Conformance contract](conformance/CONTRACT.md)*
 
 ```
 skill domain(url: text) -> text {

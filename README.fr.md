@@ -1,5 +1,9 @@
 # Super Code
 
+[![tests](https://github.com/NeousAxis/supercode/actions/workflows/test.yml/badge.svg)](https://github.com/NeousAxis/supercode/actions/workflows/test.yml)
+
+*[English version](README.md)* · *[Grammaire](spec/GRAMMAR.md)* · *[Contrat de conformité](conformance/CONTRACT.md)*
+
 Un langage pour écrire des **missions d'agents**. Super simple, super rapide,
 super léger, et capable de transformer une abstraction complexe décrite en une
 phrase en une brique définitive.
