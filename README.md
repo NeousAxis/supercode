@@ -328,7 +328,7 @@ Every claim below was run on a real machine, not reasoned about:
 ## Layout
 
 ```
-spec/GRAMMAR.md   the entire grammar, on one page (currently in French)
+spec/GRAMMAR.md   the entire grammar, on one page (normative)
 conformance/      CONTRACT.md, the case suite, and two other implementations
 src/lexer.ts      lexing
 src/parser.ts     parsing
@@ -347,9 +347,11 @@ try, the whole grammar has to fit in its system prompt. That constraint drove
 every design decision, starting with the rule that there is **exactly one way to
 write each thing**.
 
-Source comments, error messages and the grammar are currently in French. An
-English translation of `spec/GRAMMAR.md` is the single most useful contribution
-anyone could make.
+The two normative documents, `spec/GRAMMAR.md` and
+`conformance/CONTRACT.md`, are in English, and they are the only ones that
+decide. French translations sit beside them as `*.fr.md`, for reading only.
+Source comments and error messages stay in French; the contract never compares
+messages, only codes, so their language commits nothing.
 
 ## License
 

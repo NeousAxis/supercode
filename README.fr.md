@@ -2,7 +2,7 @@
 
 [![tests](https://github.com/NeousAxis/supercode/actions/workflows/test.yml/badge.svg)](https://github.com/NeousAxis/supercode/actions/workflows/test.yml)
 
-*[English version](README.md)* · *[Grammaire](spec/GRAMMAR.md)* · *[Contrat de conformité](conformance/CONTRACT.md)*
+*[English version](README.md)* · *[Grammaire](spec/GRAMMAR.fr.md)* · *[Contrat de conformité](conformance/CONTRACT.fr.md)*
 
 Un langage pour écrire des **missions d'agents**. Super simple, super rapide,
 super léger, et capable de transformer une abstraction complexe décrite en une
@@ -350,7 +350,7 @@ sous-processus. Les deux sont écrits mais n'ont pas tourné. Le fournisseur
 ## Organisation
 
 ```
-spec/GRAMMAR.md   la grammaire entière, sur une page
+spec/GRAMMAR.md   la grammaire entière, sur une page (normative, en anglais)
 src/lexer.ts      analyse lexicale
 src/parser.ts     analyse syntaxique
 src/interp.ts     interpréteur

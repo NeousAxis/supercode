@@ -1,111 +1,114 @@
-# Super Code — grammaire complète (v0.1)
+# Super Code — complete grammar (v0.1)
 
-Ce fichier est la spécification **entière** du langage. Il tient en une page pour
-qu'un LLM puisse le lire dans son prompt système et écrire du Super Code correct du
-premier coup, sans avoir jamais vu le langage pendant son entraînement.
+> **This file is normative.** [`GRAMMAR.fr.md`](GRAMMAR.fr.md) is a courtesy
+> translation; where the two disagree, this one decides.
 
-Règle de conception : **une seule façon d'écrire chaque chose**. Pas de sucre
-syntaxique, pas de variantes, pas d'options.
+This file is the **entire** specification of the language. It fits on one page so
+that a model can read it in its system prompt and write correct Super Code on the
+first try, having never seen the language during training.
 
-## 1. Structure d'un fichier
+Design rule: **exactly one way to write each thing**. No syntactic sugar, no
+variants, no options.
 
-```
-programme   := ( skill | mission )*
-
-mission     := "mission" IDENT "{" entete* instruction* "}"
-entete      := "uses"   capacite ("," capacite)*
-             | "budget" limite ("," limite)*
-             | "every"  DUREE
-skill       := "skill" IDENT "(" params? ")" "->" type "{" TEXTE "}"
-```
-
-`uses` déclare tout ce que la mission a le droit de toucher. Ce qui n'est pas
-déclaré est refusé à l'exécution, pas au bon vouloir du code.
+## 1. File structure
 
 ```
-capacite    := IDENT "." IDENT "(" TEXTE ")"      # net.get("https://api.exemple.com/**")
-limite      := ARGENT | NOMBRE "steps" | DUREE    # 0.50usd, 30 steps, 5min
+program    := ( skill | mission )*
+
+mission    := "mission" IDENT "{" header* statement* "}"
+header     := "uses"   capability ("," capability)*
+            | "budget" limit ("," limit)*
+            | "every"  DURATION
+skill      := "skill" IDENT "(" params? ")" "->" type "{" TEXT "}"
 ```
 
-## 2. Instructions
+`uses` declares everything the mission is allowed to touch. Anything not declared
+is refused at runtime, not left to the good will of the code.
 
 ```
-instruction := "let" IDENT "=" expr
-             | "if" expr bloc ("else" bloc)?
-             | "for" IDENT "in" expr bloc
-             | "repeat" bloc "until" expr   # boucle jusqu'à l'objectif
-             | "confirm" expr          # point d'arrêt humain obligatoire
-             | "log" expr
-             | "done"                  # termine la mission avec succès
-             | "fail" expr             # termine la mission en erreur
-             | expr                    # une expression seule, pour ses effets
-bloc        := "{" instruction* "}"
+capability := IDENT "." IDENT "(" TEXT ")"       # net.get("https://api.example.com/**")
+limit      := MONEY | NUMBER "steps" | DURATION  # 0.50usd, 30 steps, 5min
 ```
 
-`repeat` recommence tant que la condition d'arrêt est fausse. Un `let` réexécuté
-remplace sa valeur précédente, donc un accumulateur traverse les tours et
-survit à la boucle :
+## 2. Statements
 
 ```
-let restants = fichiers
-let notes    = []
+statement := "let" IDENT "=" expr
+           | "if" expr block ("else" block)?
+           | "for" IDENT "in" expr block
+           | "repeat" block "until" expr   # loop toward a goal
+           | "confirm" expr                # mandatory human stop
+           | "log" expr
+           | "done"                        # end the mission successfully
+           | "fail" expr                   # end the mission in error
+           | expr                          # a bare expression, for its effects
+block     := "{" statement* "}"
+```
+
+`repeat` runs again as long as the stop condition is false. A re-executed `let`
+replaces its previous value, so an accumulator crosses the turns and survives the
+loop:
+
+```
+let remaining = files
+let notes     = []
 repeat {
-  let notes    = notes + ["vu {restants[0]}"]
-  let restants = slice(restants, 1, len(restants))
-} until len(restants) == 0
+  let notes     = notes + ["seen {remaining[0]}"]
+  let remaining = slice(remaining, 1, len(remaining))
+} until len(remaining) == 0
 ```
 
-Deux règles refusées à l'analyse, pas à l'exécution :
+Two rules refused at parse time, not at runtime:
 
-- une mission contenant un `repeat` **doit** déclarer un budget en étapes ou en
-  durée. Chaque tour en consomme une, donc une boucle qui n'atteint jamais son
-  objectif s'arrête sur le budget au lieu de tourner sans fin ;
-- un `confirm` **doit** porter sur une expression contenant un effet. Garder
-  une valeur ne protège rien et donnerait une fausse assurance.
+- a mission containing a `repeat` **must** declare a budget in steps or in
+  duration. Each turn consumes one step, so a loop that never reaches its goal
+  stops on the budget instead of running forever;
+- a `confirm` **must** carry an expression containing an effect. Guarding a value
+  protects nothing and would be false assurance.
 
 ## 3. Expressions
 
-Par précédence croissante :
+By increasing precedence:
 
 ```
-expr     := pipe
-pipe     := filtre ( "|>" filtre )*                    # a |> f |> g  ==  g(f(a))
-filtre   := ou ( ("where" | "map") ou )*               # liste where cond, liste map expr
-ou       := et ( "or" et )*
-et       := cmp ( "and" cmp )*
-cmp      := somme ( ("=="|"!="|"<"|">"|"<="|">=") somme )*
-somme    := produit ( ("+"|"-") produit )*
-produit  := unaire ( ("*"|"/") unaire )*
-unaire   := ("not" | "-") unaire | suffixe
-suffixe  := primaire ( "." IDENT | "[" expr "]" | "(" args ")" )*
-primaire := NOMBRE | TEXTE | "true" | "false" | "null" | "it" | IDENT
-          | "(" expr ")" | liste | fiche | effet | modele
-          | "." IDENT                                  # sucre pour it.IDENT
-liste    := "[" (expr ("," expr)*)? "]"
-fiche    := "{" (IDENT ":" expr ("," IDENT ":" expr)*)? "}"
+expr    := pipe
+pipe    := filter ( "|>" filter )*                    # a |> f |> g  ==  g(f(a))
+filter  := or ( ("where" | "map") or )*               # list where cond, list map expr
+or      := and ( "or" and )*
+and     := cmp ( "and" cmp )*
+cmp     := sum ( ("=="|"!="|"<"|">"|"<="|">=") sum )*
+sum     := product ( ("+"|"-") product )*
+product := unary ( ("*"|"/") unary )*
+unary   := ("not" | "-") unary | postfix
+postfix := primary ( "." IDENT | "[" expr "]" | "(" args ")" )*
+primary := NUMBER | TEXT | "true" | "false" | "null" | "it" | IDENT
+         | "(" expr ")" | list | record | effect | model
+         | "." IDENT                                  # sugar for it.IDENT
+list    := "[" (expr ("," expr)*)? "]"
+record  := "{" (IDENT ":" expr ("," IDENT ":" expr)*)? "}"
 ```
 
-Dans un `where` ou un `map`, `it` désigne l'élément courant. `.titre` est un
-raccourci pour `it.titre`.
+Inside a `where` or a `map`, `it` is the current element. `.title` is shorthand
+for `it.title`.
 
-## 4. Les deux opérateurs qui font le langage
-
-```
-effet    := "!" IDENT "." IDENT "(" args ")" modificateur*
-modificateur := "retry" NOMBRE | "timeout" DUREE
-modele   := "~" TEXTE ( "(" args ")" )? ( "as" type )?
-```
-
-`!` marque un **effet** : tout ce qui touche le monde extérieur. Chaque effet est
-journalisé, donc rejouable : si le programme meurt, il reprend sans refaire les
-appels déjà faits. Ce qui n'a pas de `!` est pur et gratuit à rejouer.
-
-`~` marque un **appel au modèle**, typé par sa sortie. Le prompt est une valeur
-du langage, pas une chaîne perdue dans un SDK.
+## 4. The two operators that make the language
 
 ```
-let pages  = !net.get("https://exemple.com/news") retry 3 timeout 10s
-let items  = ~"extrais les titres et leur date" (pages) as list<{titre: text, date: text}>
+effect   := "!" IDENT "." IDENT "(" args ")" modifier*
+modifier := "retry" NUMBER | "timeout" DURATION
+model    := "~" TEXT ( "(" args ")" )? ( "as" type )?
+```
+
+`!` marks an **effect**: anything that touches the outside world. Every effect is
+journaled, therefore replayable: if the program dies, it resumes without redoing
+the calls already made. Anything without a `!` is pure and free to replay.
+
+`~` marks a **model call**, typed by its output. The prompt is a value of the
+language, not a string lost inside an SDK.
+
+```
+let pages = !net.get("https://example.com/news") retry 3 timeout 10s
+let items = ~"extract the titles and their dates" (pages) as list<{title: text, date: text}>
 ```
 
 ## 5. Types
@@ -116,81 +119,81 @@ type := "text" | "number" | "bool" | "any"
       | "{" IDENT ":" type ("," IDENT ":" type)* "}"
 ```
 
-## 6. Skills — décrire une abstraction une seule fois
+## 6. Skills — describe an abstraction once
 
 ```
-skill domaine(url: text) -> text {
-  "renvoie le nom de domaine d'une URL, sans le www."
+skill domain(url: text) -> text {
+  "returns the domain name of a URL, without the www. prefix."
 }
 ```
 
-Au premier appel, le modèle écrit l'implémentation, elle est testée sur l'entrée
-réelle puis mise en cache. Tous les appels suivants sont du code pur : zéro
-token, zéro latence. Si l'abstraction n'est pas exprimable en code, elle reste un
-appel au modèle et le signale.
+On the first call the model writes the implementation; it is tested against the
+real input, then cached. Every later call is pure code: zero tokens, zero
+latency. If the abstraction cannot be expressed as code, it stays a model call
+and says so.
 
-C'est le mécanisme central du langage : une abstraction complexe se décrit en une
-phrase et devient une brique définitive.
+This is the central mechanism of the language: a complex abstraction is described
+in one sentence and becomes a permanent building block.
 
-Le code d'un skill est enregistré avec son empreinte : un code modifié après coup
-n'est jamais exécuté, il faut le relire et le ré-approuver (`super trust`). Il
-s'exécute dans un processus séparé, sans disque, sans sous-processus et sans
-environnement, donc même une évasion n'y trouverait aucune clé.
+Skill code is recorded with its fingerprint: code modified afterwards is never
+executed, it must be reread and re-approved (`super trust`). It runs in a
+separate process with no disk, no subprocess and no environment, so even an
+escape would find no key there.
 
-## 7. Fonctions intégrées (pures)
+## 7. Built-in functions (pure)
 
 `len(x)` `slice(l, a, b)` `join(l, sep)` `split(t, sep)` `upper(t)` `lower(t)`
 `trim(t)` `sum(l)` `sort(l)` `unique(l)` `keys(f)` `to_json(x)` `parse_json(t)`
 `now()` `int(x)` `text(x)`
 
-## 8. Effets disponibles
+## 8. Available effects
 
-| Effet | Capacité à déclarer | Renvoie |
+| Effect | Capability to declare | Returns |
 |---|---|---|
-| `!net.get(url)` | `net.get("motif")` | texte, ou fiche si la réponse est du JSON |
-| `!net.post(url, corps, entetes?)` | `net.post("motif")` | idem ; `corps` part en JSON, ou en texte si c’est un texte |
-| `!fs.graph(motif)` | `fs.graph("motif")` | `{fichiers: [{chemin, ext, octets, lignes}], liens: [{de, vers}]}` |
-| `!file.read(chemin)` | `file.read("motif")` | texte |
-| `!file.write(chemin, contenu)` | `file.write("motif")` | chemin écrit |
-| `!file.append(chemin, contenu)` | `file.append("motif")` | chemin écrit |
+| `!net.get(url)` | `net.get("pattern")` | text, or a record if the response is JSON |
+| `!net.post(url, body, headers?)` | `net.post("pattern")` | same; `body` goes out as JSON, or as text if it is a text |
+| `!fs.graph(pattern)` | `fs.graph("pattern")` | `{fichiers: [{chemin, ext, octets, lignes}], liens: [{de, vers}]}` |
+| `!file.read(path)` | `file.read("pattern")` | text |
+| `!file.write(path, content)` | `file.write("pattern")` | the path written |
+| `!file.append(path, content)` | `file.append("pattern")` | the path written |
 
-Règle sans exception : un effet `!ns.op(...)` exige la capacité `ns.op`. Les
-motifs acceptent `*` (un segment) et `**` (tout le reste), et sont comparés au
-premier argument de l'effet.
+Rule with no exception: an effect `!ns.op(...)` requires the capability `ns.op`.
+Patterns accept `*` (one segment) and `**` (everything else), and are matched
+against the effect's first argument.
 
-## 9. Nombres, comparaisons, fiches
+## 9. Numbers, comparisons, records
 
-Il n'y a qu'un seul type numérique. Un nombre dont la valeur est entière s'écrit
-**sans partie décimale**, partout : dans un texte interpolé, dans `to_json`, et
-dans toute sérialisation. `3 / 1` s'écrit `3`, jamais `3.0`.
+There is a single numeric type. A number whose value is integral is written
+**without a decimal part**, everywhere: in an interpolated text, in `to_json`,
+and in any serialisation. `3 / 1` is written `3`, never `3.0`.
 
-**Il n'existe ni infini ni « pas un nombre ».** Tout calcul qui ne donne pas un
-nombre fini interrompt la mission avec `ARITHMETIC_ERROR`. `1 / 0` ne vaut pas
-`Infinity` : une mission qui écrit `Infinity` dans un rapport est pire qu'une
-mission qui s'arrête, parce que l'erreur voyage sans bruit jusqu'au lecteur.
+**There is no infinity and no "not a number".** Any computation that does not
+yield a finite number stops the mission with `ARITHMETIC_ERROR`. `1 / 0` is not
+`Infinity`: a mission that writes `Infinity` into a report is worse than a
+mission that stops, because the error travels silently all the way to the reader.
 
-**`<`, `>`, `<=`, `>=` comparent deux nombres ou deux textes**, jamais deux
-natures différentes. `1 < "a"` est une `TYPE_ERROR`, pas un `false` inventé.
+**`<`, `>`, `<=`, `>=` compare two numbers or two texts**, never two different
+natures. `1 < "a"` is a `TYPE_ERROR`, not an invented `false`.
 
-**`==` et `!=` comparent la structure**, pas la sérialisation : `{a: 1, b: 2}`
-égale `{b: 2, a: 1}`. L'ordre des champs sert à l'affichage, pas à l'identité.
+**`==` and `!=` compare structure**, not serialisation: `{a: 1, b: 2}` equals
+`{b: 2, a: 1}`. Field order serves display, not identity.
 
-**Une fiche garde l'ordre de ses champs** pour `keys` et `to_json`. Un champ
-répété remplace la valeur du précédent sans changer sa place : `{a: 1, b: 2, a: 3}`
-vaut `{a: 3, b: 2}`, dans cet ordre.
+**A record keeps the order of its fields** for `keys` and `to_json`. A repeated
+field replaces the previous value without changing its position: `{a: 1, b: 2, a: 3}`
+is `{a: 3, b: 2}`, in that order.
 
-Ces cinq règles ne sont pas du détail. Trois implémentations les ont d'abord
-enfreintes chacune à sa façon, et sans elles trois programmes corrects donnaient
-trois résultats différents.
+These five rules are not detail. Three implementations each broke them in their
+own way first, and without them three correct programs gave three different
+results.
 
-## 10. Textes
+## 10. Texts
 
-Un texte est une suite de **points de code Unicode**. Ni des unités UTF-16, ni
-des octets. `len("👍")` vaut 1, et `slice` découpe par points de code. Sans cette
-règle, trois implémentations correctes répondraient 2, 1 et 4.
+A text is a sequence of **Unicode code points**. Not UTF-16 units, not bytes.
+`len("👍")` is 1, and `slice` cuts by code points. Without this rule, three
+correct implementations would answer 2, 1 and 4.
 
-## 11. Lexique
+## 11. Lexical
 
-Commentaires : `#` jusqu'à la fin de la ligne.
-Textes : `"..."` avec interpolation `{expr}`, échappements `\"` `\\` `\n` `\{`.
-Durées : `250ms` `30s` `5min` `6h` `2d`. Argent : `0.50usd`.
+Comments: `#` to end of line.
+Texts: `"..."` with `{expr}` interpolation, escapes `\"` `\\` `\n` `\{`.
+Durations: `250ms` `30s` `5min` `6h` `2d`. Money: `0.50usd`.

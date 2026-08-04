@@ -1,118 +1,120 @@
-# Contrat de conformité de Super Code
+# Super Code conformance contract
 
-Ce fichier décrit tout ce qu'une implémentation de Super Code doit faire pour
-être vérifiable. Il tient volontairement sur une page, comme la grammaire.
+> **This file is normative.** [`CONTRACT.fr.md`](CONTRACT.fr.md) is a courtesy
+> translation; where the two disagree, this one decides.
 
-L'implémentation de référence (`src/`) tourne sur Node. Ce n'est qu'une
-implémentation parmi d'autres. Le langage, lui, est défini par
-[`../spec/GRAMMAR.md`](../spec/GRAMMAR.md) et par cette suite.
+This file describes everything an implementation of Super Code must do to be
+verifiable. It deliberately fits on one page, like the grammar.
 
-## Le seul point de contact
+The reference implementation (`../src/`) runs on Node. It is only one
+implementation among others. The language itself is defined by
+[`../spec/GRAMMAR.md`](../spec/GRAMMAR.md) and by this suite.
 
-Une implémentation doit fournir une commande qui accepte :
+## The single point of contact
+
+An implementation must provide a command that accepts:
 
 ```
-<commande> <fichier.sup> --dir <dossier>
+<command> <file.sup> --dir <directory>
 ```
 
-- `<fichier.sup>` : le programme à exécuter. La **première** mission du fichier
-  est celle qui tourne.
-- `--dir <dossier>` : le répertoire de travail. Tous les chemins relatifs des
-  effets `file.*` et `fs.graph` s'y résolvent.
+- `<file.sup>`: the program to run. The **first** mission in the file is the one
+  that runs.
+- `--dir <directory>`: the working directory. All relative paths of `file.*` and
+  `fs.graph` effects resolve inside it.
 
-Elle écrit sur la sortie standard **un unique objet JSON, et rien d'autre.**
-Pas de couleur, pas d'identifiant d'exécution, pas d'horodatage, pas de barre de
-progression. Ce qui doit être dit à l'humain va sur la sortie d'erreur.
+It writes to standard output **one single JSON object, and nothing else.** No
+colour, no run identifier, no timestamp, no progress bar. Whatever must be said
+to a human goes to standard error.
 
 ```json
 {
-  "logs":  ["première ligne", "deuxième ligne"],
+  "logs":  ["first line", "second line"],
   "error": null,
-  "files": { "out/note.md": "contenu complet" }
+  "files": { "out/note.md": "full content" }
 }
 ```
 
-| Champ | Contenu |
+| Field | Content |
 |---|---|
-| `logs` | un élément par instruction `log` effectivement exécutée, dans l'ordre, après interpolation |
-| `error` | `null` si la mission s'est terminée, sinon `{ "code": "..." }` |
-| `files` | tous les fichiers présents dans `--dir` à la fin, chemin relatif vers contenu, hors `.super/`, `fixtures.json`, `*.sup` et `*.expected.json` |
+| `logs` | one element per `log` statement actually executed, in order, after interpolation |
+| `error` | `null` if the mission finished, otherwise `{ "code": "..." }` |
+| `files` | every file present in `--dir` at the end, relative path to content, excluding `.super/`, `fixtures.json`, `*.sup` and `*.expected.json` |
 
-Le code de sortie du processus n'est pas comparé : une mission qui échoue peut
-sortir en 0 comme en 1. Seul le JSON compte.
+The process exit code is not compared: a failing mission may exit 0 or 1. Only
+the JSON counts.
 
-## Codes d'erreur
+## Error codes
 
-Les messages ne sont **jamais** comparés : ils peuvent être dans n'importe quelle
-langue, aussi détaillés que l'implémentation le souhaite. Seul le code l'est.
+Messages are **never** compared: they may be in any language, as detailed as the
+implementation wishes. Only the code is compared.
 
-| Code | Quand |
+| Code | When |
 |---|---|
-| `SYNTAX_ERROR` | le programme ne se lit pas, ou viole une règle refusée à l'analyse |
-| `CAPABILITY_DENIED` | un effet sort du périmètre déclaré par `uses` |
-| `BUDGET_EXCEEDED` | argent, étapes ou durée épuisés |
-| `TYPE_ERROR` | une valeur ne correspond pas au type déclaré |
-| `UNDEFINED_NAME` | nom inconnu, ou `it` hors d'un `where`/`map` |
-| `NOT_CALLABLE` | appel de ce qui n'est pas appelable |
-| `NOT_A_LIST` | `where`, `map` ou `for` sur autre chose qu'une liste |
-| `EFFECT_FAILED` | l'effet était autorisé mais a échoué |
-| `SKILL_FAILED` | le code d'un skill a échoué ou a été refusé |
-| `MISSION_FAILED` | l'instruction `fail` |
-| `MODEL_FAILED` | le modèle n'a pas produit de valeur exploitable |
-| `ARITHMETIC_ERROR` | un calcul ne donne pas un nombre fini |
-| `INTERNAL` | tout le reste |
+| `SYNTAX_ERROR` | the program does not parse, or breaks a rule refused at parse time |
+| `CAPABILITY_DENIED` | an effect falls outside the scope declared by `uses` |
+| `BUDGET_EXCEEDED` | money, steps or duration exhausted |
+| `TYPE_ERROR` | a value does not match the declared type, or an ordering compares two different natures |
+| `UNDEFINED_NAME` | unknown name, or `it` outside a `where`/`map` |
+| `NOT_CALLABLE` | calling something that is not callable |
+| `NOT_A_LIST` | `where`, `map` or `for` on something other than a list |
+| `EFFECT_FAILED` | the effect was allowed but failed |
+| `SKILL_FAILED` | skill code failed or was refused |
+| `MISSION_FAILED` | the `fail` statement |
+| `MODEL_FAILED` | the model produced no usable value |
+| `ARITHMETIC_ERROR` | a computation does not yield a finite number |
+| `INTERNAL` | everything else |
 
-## Comportement attendu en mode conformité
+## Expected behaviour in conformance mode
 
-- Les points d'arrêt `confirm` sont **approuvés automatiquement** : la suite doit
-  être déterministe, et l'attente d'un humain ne l'est pas.
-- Aucun appel réseau, aucun appel à un modèle. Les cas de la suite n'utilisent ni
-  `net.*` ni `~`.
-- Le journal, les skills et l'état interne vont dans `<dir>/.super/`, qui est
-  exclu de `files`.
+- `confirm` stops are **auto-approved**: the suite must be deterministic, and
+  waiting for a human is not.
+- No network call, no model call. The suite's cases use neither `net.*` nor `~`.
+- The journal, skills and internal state live in `<dir>/.super/`, which is
+  excluded from `files`.
 
-## Niveaux
+## Levels
 
-Chaque cas déclare un `niveau` dans son fichier d'attente (1 par défaut). Une
-implémentation partielle se mesure au niveau qu'elle vise, sans prétendre couvrir
-le reste :
+Each case declares a `niveau` in its expectation file (1 by default). A partial
+implementation measures itself against the level it targets, without pretending
+to cover the rest:
 
-| Niveau | Contenu | Comment le runner le vérifie |
+| Level | Content | How the runner checks it |
 |---|---|---|
-| 1 | sémantique pure, effets sur fichiers, capacités, budget, règles refusées à l'analyse | une exécution |
-| 2 | journal et reprise | **deux** exécutions dans le même dossier : la seconde doit rejouer son journal et ne refaire aucun effet |
+| 1 | pure semantics, file effects, capabilities, budget, rules refused at parse time | one run |
+| 2 | journal and resume | **two** runs in the same directory: the second must replay its journal and redo no effect |
 
 ```bash
-node conformance/run.mjs --niveau 1 --cmd "./ma-super-implementation conform"
+node conformance/run.mjs --niveau 1 --cmd "./my-super-implementation conform"
 ```
 
-## Ce que la suite ne couvre pas encore
+## What the suite does not cover yet
 
-Elle ne couvre pas :
+It does not cover:
 
-- l'opérateur `~`, qui demande un modèle ;
-- `net.get` et `net.post`, qui demandent le réseau ;
-- la synthèse d'un skill et son bac à sable.
+- the `~` operator, which needs a model;
+- `net.get` and `net.post`, which need the network;
+- skill synthesis and its sandbox.
 
-Ce sont les prochains chapitres. Ils demandent un protocole de test plus riche,
-pas une autre philosophie.
+Those are the next chapters. They need a richer test protocol, not a different
+philosophy.
 
-## Lancer la suite
+## Running the suite
 
-Contre l'implémentation de référence :
+Against the reference implementation:
 
 ```bash
 node conformance/run.mjs
 ```
 
-Contre la vôtre :
+Against yours:
 
 ```bash
-node conformance/run.mjs --cmd "python3 chemin/vers/votre/cli.py conform"
+node conformance/run.mjs --cmd "python3 path/to/your/cli.py conform"
 node conformance/run.mjs --cmd "./super-rs conform" --only 03 --verbose
 ```
 
-Un cas est un couple de fichiers dans `cases/` : `<nom>.sup` et
-`<nom>.expected.json`. Chaque cas tourne dans un dossier temporaire neuf, donc
-aucun cas n'influence les autres. Ajouter un cas, c'est ajouter deux fichiers,
-et cela devient une contrainte pour toutes les implémentations.
+A case is a pair of files in `cases/`: `<name>.sup` and `<name>.expected.json`.
+Each case runs in a fresh temporary directory, so no case influences another.
+Adding a case means adding two files, and it becomes a constraint on every
+implementation.
