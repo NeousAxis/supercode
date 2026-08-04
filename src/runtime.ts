@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { existsSync, mkdirSync, appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import * as path from 'node:path';
-import * as vm from 'node:vm';
+import { IsolatedSandbox } from './sandbox.ts';
 
 export class SuperError extends Error {
   constructor(msg: string) { super(msg); this.name = 'SuperError'; }
@@ -430,6 +430,24 @@ async function doEffect(ctx: EffectContext, ns: string, op: string, args: any[])
     if (ct.includes('json')) { try { return JSON.parse(body); } catch { return body; } }
     return body;
   }
+  if (ns === 'net' && op === 'post') {
+    const [url, corps, entetes] = args;
+    const estTexte = typeof corps === 'string';
+    const res = await fetch(String(url), {
+      method: 'POST',
+      headers: {
+        'content-type': estTexte ? 'text/plain; charset=utf-8' : 'application/json',
+        'user-agent': 'super/0.1',
+        ...(entetes && typeof entetes === 'object' ? entetes : {}),
+      },
+      body: estTexte ? corps : JSON.stringify(corps ?? {}),
+    });
+    const texte = await res.text();
+    if (!res.ok) throw new SuperError(`HTTP ${res.status} sur POST ${url} : ${texte.slice(0, 200)}`);
+    const ct = res.headers.get('content-type') ?? '';
+    if (ct.includes('json')) { try { return JSON.parse(texte); } catch { return texte; } }
+    return texte;
+  }
   if (ns === 'fs' && op === 'graph') return buildGraph(ctx.cwd, String(args[0]));
   if (ns === 'file' && op === 'read') {
     return fs.readFile(path.resolve(ctx.cwd, String(args[0])), 'utf8');
@@ -689,7 +707,8 @@ export class SkillManifest {
  * puis la met en cache. Les appels suivants ne coûtent plus rien.
  */
 export class SkillRegistry {
-  private compiled = new Map<string, (...a: any[]) => any>();
+  private compiled = new Map<string, string>();
+  private sandbox = new IsolatedSandbox();
   private cacheDir: string;
   private provider: ModelProvider;
   private ctx: EffectContext;
@@ -710,9 +729,14 @@ export class SkillRegistry {
   }
 
   async call(def: SkillDef, args: any[]): Promise<any> {
-    const fn = await this.resolve(def, args);
-    if (fn) {
-      const out = fn(...args);
+    const src = await this.resolve(def, args);
+    if (src) {
+      let out: any;
+      try {
+        out = await this.sandbox.call(src, args);
+      } catch (e) {
+        throw new SuperError(`le skill « ${def.name} » a échoué : ${(e as Error).message}`);
+      }
       const err = typeError(out, def.ret, `${def.name}(...)`);
       if (err) throw new SuperError(`le skill « ${def.name} » a renvoyé une valeur hors type : ${err}`);
       return out;
@@ -721,7 +745,10 @@ export class SkillRegistry {
     return runAsk(this.ctx, this.provider, def.desc, args, def.ret);
   }
 
-  private async resolve(def: SkillDef, args: any[]): Promise<((...a: any[]) => any) | null> {
+  /** Libère le processus du bac à sable en fin de mission. */
+  close(): void { this.sandbox.kill(); }
+
+  private async resolve(def: SkillDef, args: any[]): Promise<string | null> {
     if (this.compiled.has(def.name)) return this.compiled.get(def.name)!;
 
     const file = this.cachePath(def);
@@ -733,9 +760,8 @@ export class SkillRegistry {
       // enregistrée au moment où il a été synthétisé et testé.
       const refus = this.manifest.verify(fileName, src);
       if (refus) throw new SuperError(refus);
-      const fn = instantiate(src, def.name);
-      this.compiled.set(def.name, fn);
-      return fn;
+      this.compiled.set(def.name, src);
+      return src;
     }
 
     this.log(`skill « ${def.name} » : synthèse en cours…`);
@@ -757,13 +783,10 @@ export class SkillRegistry {
       return null;
     }
 
-    let fn: (...a: any[]) => any;
+    // Le code fraîchement écrit est essayé dans le bac à sable isolé, sur
+    // l'entrée réelle, avant d'être approuvé et mis en cache.
     try {
-      fn = instantiate(src, def.name);
-      const out = fn(...args);
-      // Un skill doit être synchrone et déterministe : une promesse signale du
-      // code qui attend quelque chose, donc qui sort du modèle de calcul pur.
-      if (out && typeof out.then === 'function') throw new SuperError('un skill ne peut pas être asynchrone');
+      const out = await this.sandbox.call(src, args);
       const err = typeError(out, def.ret, `${def.name}(...)`);
       if (err) throw new SuperError(err);
     } catch (e) {
@@ -775,21 +798,9 @@ export class SkillRegistry {
 
     writeFileSync(file, src);
     this.manifest.record(fileName, src, this.provider.name);
-    this.compiled.set(def.name, fn);
+    this.compiled.set(def.name, src);
     this.log(`skill « ${def.name} » : compilé, empreinte enregistrée, mis en cache (${path.relative(process.cwd(), file)}).`);
-    return fn;
+    return src;
   }
 }
 
-/**
- * Le code synthétisé tourne dans un contexte vide : ni require, ni import, ni
- * process, ni fs. Il ne voit que les objets de base de JavaScript.
- */
-function instantiate(src: string, name: string): (...a: any[]) => any {
-  // Contexte minimal : les objets de base de JavaScript, plus deux utilitaires
-  // purs dont un modèle a naturellement besoin. Rien d'autre n'est visible.
-  const sandbox = vm.createContext({ URL, URLSearchParams });
-  const fn = vm.runInContext(`(${src})`, sandbox, { timeout: 1000, filename: `skill:${name}` });
-  if (typeof fn !== 'function') throw new SuperError('le code synthétisé n\'est pas une fonction');
-  return fn as (...a: any[]) => any;
-}

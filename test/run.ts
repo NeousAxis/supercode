@@ -345,6 +345,39 @@ await test('un skill absent du manifeste est refusé', async () => {
   assert(m.verify(nom, '(t) => "PIRATE"') !== null, 'un fichier absent du manifeste doit être refusé');
 });
 
+await test('un skill ne peut ni lire le disque ni lancer un process', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'super-isole-'));
+  // Du code hostile, qui tente explicitement de sortir du bac à sable.
+  const hostile = `() => {
+    const essais = [];
+    try { essais.push('require:' + typeof require); } catch { essais.push('require:bloqué'); }
+    try { essais.push('process:' + typeof process); } catch { essais.push('process:bloqué'); }
+    try { essais.push('fetch:' + typeof fetch); } catch { essais.push('fetch:bloqué'); }
+    return essais.join(' ');
+  }`;
+  const fixtures = { ['loose:' + shaFirstLine("Description : tente de sortir du bac à sable")]: hostile };
+  const src = `
+    skill evasion() -> text { "tente de sortir du bac à sable" }
+    mission m { log evasion() }`;
+  const { logs } = await run(src, { dir, runId: 'iso1', fixtures });
+  const sortie = logs.find((l) => l.includes('require:')) ?? '';
+  assert(sortie.includes('require:undefined'), `require ne doit pas exister : ${sortie}`);
+  assert(sortie.includes('process:undefined'), `process ne doit pas exister : ${sortie}`);
+  assert(sortie.includes('fetch:undefined'), `fetch ne doit pas exister : ${sortie}`);
+});
+
+await test('un skill qui boucle sans fin est interrompu', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'super-boucle-'));
+  const fixtures = { ['loose:' + shaFirstLine('Description : boucle sans fin')]: '() => { while (true) {} }' };
+  const src = `
+    skill bloque() -> text { "boucle sans fin" }
+    mission m { log bloque() }`;
+  // Le code ne rend jamais la main : le bac à sable le coupe. Le skill est
+  // alors jugé invalide et retombe sur le modèle, qui n'a pas de fixture ici.
+  // Ce qui compte : la mission se termine au lieu de rester bloquée à jamais.
+  await expectFailure(src, 'aucune fixture', { dir, runId: 'b1', fixtures });
+});
+
 function shaFirstLine(line: string): string {
   return createHash('sha256').update(line).digest('hex').slice(0, 16);
 }

@@ -125,8 +125,10 @@ skill domain(url: text) -> text {
 }
 ```
 
-On the first call the model writes the implementation. It runs in a sandbox with
-no network, no disk, no `require` and no `process`, is tested against the real
+On the first call the model writes the implementation. It runs in a separate
+process with Node permission model, an empty vm context and an empty
+environment, so it reaches no disk, no subprocess, no network and none of your
+API keys. It is tested against the real
 input, checked against the declared type, then cached. **Every later call is pure
 code: zero tokens, zero latency, identical result.** If the abstraction cannot be
 expressed as deterministic code, it stays a model call and says so.
@@ -178,7 +180,7 @@ Node 22.6 or newer. Nothing to install.
 ```bash
 node src/cli.ts check missions/veille.sup   # syntax, capabilities, budget
 node src/cli.ts run   missions/hello.sup    # the smallest mission
-node test/run.ts                            # 22 tests, no network
+node test/run.ts                            # 24 tests, no network
 ```
 
 Full offline demo, using recorded model responses:
@@ -204,6 +206,7 @@ export ANTHROPIC_API_KEY=... && node src/cli.ts run missions/veille.sup --provid
 | `super run <f.sup> [mission]` | run it |
 | `super check <f.sup>` | check syntax, print capabilities and budget |
 | `super trust [--yes]` | re-approve skill code after reviewing an edit |
+| `super watch <f.sup>` | rerun the mission at its `every` interval |
 | `super approve <runId>` | approve the pending stop |
 | `super runs` | list runs and which ones await approval |
 
@@ -214,7 +217,7 @@ Options: `--provider`, `--model`, `--base-url`, `--fixtures`, `--resume`,
 
 Every claim below was run on a real machine, not reasoned about:
 
-- 22 tests, no network required;
+- 24 tests, no network required;
 - real network effects (11 live calls to the Hacker News API) and their journaling;
 - resume: a resumed run replays its steps without repeating a single call;
 - the approval gate: the file is not written while approval is missing;
@@ -225,17 +228,23 @@ Every claim below was run on a real machine, not reasoned about:
 - `repeat` stopping on its goal, and being rejected at parse time without a
   bounded budget;
 - `!fs.graph` on a real repository, driving a file-by-file audit looped end to end;
-- recovery from a journal truncated by a crash.
+- recovery from a journal truncated by a crash;
+- skill code denied `require`, `process` and `fetch` from inside the sandbox,
+  and an endless loop cut off instead of hanging the mission;
+- `!net.post` against a live endpoint, and `super watch` firing three scheduled
+  turns, each with its own journal.
 
 ## Known limits (v0.1)
 
-- The skill sandbox uses `node:vm`, which isolates globals but is **not** a
-  security boundary against hostile code. Fine for model-written code on your own
-  machine, not for untrusted code.
-- `every 6h` is declarative: nothing schedules missions yet.
-- No user-defined functions outside skills, no recursion, no `while`.
-- Effects limited to `net.get`, `fs.graph`, `file.read`, `file.write`,
-  `file.append`. No `net.post` yet.
+- Skill code runs in a separate process with Node's permission model and an
+  empty environment, so it reaches neither disk, subprocesses, nor your API keys.
+  That is a real boundary against accidental and most malicious code; it is not a
+  defence against a V8 exploit. Nothing written in JavaScript is.
+- No user-defined functions outside skills, no recursion, no `while`. This is
+  deliberate: every feature costs a line of grammar, and the grammar has to keep
+  fitting in a system prompt.
+- `super watch` runs in the foreground. For true background scheduling, wrap it
+  in launchd, systemd or cron.
 - The journal is one file per run, with no compaction.
 
 ## Layout

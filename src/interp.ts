@@ -55,6 +55,9 @@ export async function runMission(program: Program, missionName: string | null, o
     else if (e instanceof NeedsApproval) {
       return { status: 'awaiting-approval', budget, pending: { key: interp.pendingKey!, description: e.description } };
     } else throw e;
+  } finally {
+    // Le processus du bac à sable ne survit pas à la mission.
+    skills.close();
   }
   return { status: 'ok', budget };
 }

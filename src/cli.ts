@@ -39,6 +39,7 @@ ${C.bold('super')} — le langage des missions
 
   super write "<demande>" -o <f.sup>            fait écrire la mission par le modèle
   super run <fichier.sup> [mission] [options]   exécute une mission
+  super watch <fichier.sup> [mission]           relance la mission à son intervalle « every »
   super check <fichier.sup>                     vérifie la syntaxe et les capacités
   super trust [--yes]                           ré-approuve le code des skills modifié
   super approve <runId> [options]               approuve le point d'arrêt en attente
@@ -51,6 +52,8 @@ Options
   --base-url <url>              endpoint compatible OpenAI (fournisseur « openai »)
   --fixtures <fichier>          fichier de fixtures (défaut : <dir>/fixtures.json)
   --resume <runId>              reprend un run existant au lieu d'en créer un
+  --every <durée>               force l'intervalle de « super watch »
+  --once                        un seul tour de « super watch »
   --yes                         approuve automatiquement tous les points d'arrêt
   --dir <chemin>                dossier d'état (défaut : .super)
 `;
@@ -68,6 +71,7 @@ async function main() {
   if (cmd === 'runs') return cmdRuns(dir);
   if (cmd === 'approve') return cmdApprove(positional[1], dir);
   if (cmd === 'run') return cmdRun(positional[1], positional[2], flags, dir);
+  if (cmd === 'watch') return cmdWatch(positional[1], positional[2], flags, dir);
 
   console.error(C.red(`commande inconnue : ${cmd}`));
   console.log(USAGE);
@@ -230,7 +234,7 @@ function cmdApprove(runId: string, dir: string) {
   console.log(C.dim(`reprends avec : super run <fichier.sup> --resume ${runId}`));
 }
 
-async function cmdRun(file: string, missionName: string | undefined, flags: Flags, dir: string) {
+async function cmdRun(file: string, missionName: string | undefined, flags: Flags, dir: string, enBoucle = false) {
   const program = loadProgram(file);
   mkdirSync(dir, { recursive: true });
 
@@ -264,7 +268,10 @@ async function cmdRun(file: string, missionName: string | undefined, flags: Flag
     console.log(C.dim(`   super approve ${runId}`));
     console.log(C.dim(`   super run ${file} --resume ${runId}`));
     console.log(C.dim(`   (${result.budget.summary()})`));
-    process.exit(10);
+    // En surveillance, un point d'arrêt met ce tour en attente sans tuer la
+    // planification : les tours suivants continuent, celui-ci attend toi.
+    if (!enBoucle) process.exit(10);
+    return;
   }
 
   if (existsSync(pendingFile)) {
@@ -273,6 +280,77 @@ async function cmdRun(file: string, missionName: string | undefined, flags: Flag
     try { (await import('node:fs')).unlinkSync(pendingFile); } catch { /* déjà parti */ }
   }
   console.log(C.green(`✓ mission terminée`) + C.dim(` (${result.budget.summary()})`));
+}
+
+/**
+ * Exécute une mission à l'intervalle qu'elle déclare avec « every ».
+ *
+ * Chaque déclenchement est un run à part entière, avec son propre journal, donc
+ * un plantage n'emporte que le tour en cours et se reprend. Un tour qui échoue
+ * est signalé et n'interrompt pas la planification : un agent de veille ne doit
+ * pas mourir parce qu'une API était indisponible une fois.
+ */
+async function cmdWatch(file: string, missionName: string | undefined, flags: Flags, dir: string) {
+  const program = loadProgram(file);
+  const mission = missionName
+    ? program.missions.find((m: any) => m.name === missionName)
+    : program.missions[0];
+  if (!mission) throw new SuperError(`mission « ${missionName} » introuvable`);
+
+  const interval = typeof flags.every === 'string' ? parseDuree(String(flags.every)) : mission.every;
+  if (!interval) {
+    throw new SuperError(
+      `la mission « ${mission.name} » ne déclare pas d'intervalle. Ajoute « every 6h » dans son en-tête, ou passe --every 6h.`,
+    );
+  }
+
+  const uneFois = flags.once === true;
+  console.log(C.dim(`surveillance de « ${mission.name} » toutes les ${humain(interval)}${uneFois ? ' (un seul tour)' : ''}`));
+  console.log(C.dim('Ctrl+C pour arrêter.'));
+
+  let arret = false;
+  process.on('SIGINT', () => { arret = true; console.log(C.dim('\narrêt demandé, fin du tour en cours…')); });
+
+  let tour = 0;
+  while (!arret) {
+    tour++;
+    const debut = Date.now();
+    console.log(`\n${C.bold(`tour ${tour}`)} ${C.dim(new Date().toISOString())}`);
+    try {
+      await cmdRun(file, mission.name, { ...flags, resume: undefined }, dir, true);
+    } catch (e) {
+      // Un tour raté ne casse pas la planification.
+      console.error(C.red(`  tour ${tour} en échec : ${(e as Error).message}`));
+    }
+    if (uneFois || arret) break;
+
+    const attente = Math.max(0, interval - (Date.now() - debut));
+    console.log(C.dim(`  prochain tour dans ${humain(attente)}`));
+    await dormir(attente, () => arret);
+  }
+  console.log(C.dim('surveillance terminée.'));
+}
+
+/** Sommeil découpé, pour que Ctrl+C réponde sans attendre six heures. */
+async function dormir(ms: number, annule: () => boolean): Promise<void> {
+  const pas = 500;
+  for (let reste = ms; reste > 0 && !annule(); reste -= pas) {
+    await new Promise((r) => setTimeout(r, Math.min(pas, reste)));
+  }
+}
+
+function humain(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60_000) return `${Math.round(ms / 1000)}s`;
+  if (ms < 3_600_000) return `${Math.round(ms / 60_000)}min`;
+  return `${(ms / 3_600_000).toFixed(1)}h`;
+}
+
+function parseDuree(s: string): number {
+  const m = s.match(/^(\d+(?:\.\d+)?)(ms|s|min|h|d)$/);
+  if (!m) throw new SuperError(`durée invalide : ${s} (exemples : 30s, 5min, 6h)`);
+  const unites: Record<string, number> = { ms: 1, s: 1000, min: 60000, h: 3600000, d: 86400000 };
+  return parseFloat(m[1]) * unites[m[2]];
 }
 
 function newRunId(): string {

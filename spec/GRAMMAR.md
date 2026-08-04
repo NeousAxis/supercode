@@ -132,8 +132,10 @@ appel au modèle et le signale.
 C'est le mécanisme central du langage : une abstraction complexe se décrit en une
 phrase et devient une brique définitive.
 
-Le code d'un skill est enregistré avec son empreinte. Un code modifié après coup
-n'est jamais exécuté : il faut le relire et le ré-approuver (`super trust`).
+Le code d'un skill est enregistré avec son empreinte : un code modifié après coup
+n'est jamais exécuté, il faut le relire et le ré-approuver (`super trust`). Il
+s'exécute dans un processus séparé, sans disque, sans sous-processus et sans
+environnement, donc même une évasion n'y trouverait aucune clé.
 
 ## 7. Fonctions intégrées (pures)
 
@@ -146,6 +148,7 @@ n'est jamais exécuté : il faut le relire et le ré-approuver (`super trust`).
 | Effet | Capacité à déclarer | Renvoie |
 |---|---|---|
 | `!net.get(url)` | `net.get("motif")` | texte, ou fiche si la réponse est du JSON |
+| `!net.post(url, corps, entetes?)` | `net.post("motif")` | idem ; `corps` part en JSON, ou en texte si c’est un texte |
 | `!fs.graph(motif)` | `fs.graph("motif")` | `{fichiers: [{chemin, ext, octets, lignes}], liens: [{de, vers}]}` |
 | `!file.read(chemin)` | `file.read("motif")` | texte |
 | `!file.write(chemin, contenu)` | `file.write("motif")` | chemin écrit |
