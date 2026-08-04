@@ -12,7 +12,9 @@
   "scripts": {
     "check": "node src/cli.ts check missions/veille.sup",
     "demo": "node src/cli.ts run missions/veille.sup",
-    "test": "node test/run.ts"
+    "test": "node test/run.ts",
+    "conform": "node conformance/run.mjs",
+    "conform:python": "node conformance/run.mjs --cmd \"python3 conformance/reference-python/super.py conform\""
   },
   "license": "MIT",
   "private": true

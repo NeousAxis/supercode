@@ -31,7 +31,7 @@ export async function runMission(program: Program, missionName: string | null, o
   const mission = missionName
     ? program.missions.find((m: Node) => m.name === missionName)
     : program.missions[0];
-  if (!mission) throw new SuperError(missionName ? `mission « ${missionName} » introuvable` : 'aucune mission dans ce fichier');
+  if (!mission) throw new SuperError(missionName ? `mission « ${missionName} » introuvable` : 'aucune mission dans ce fichier', 'SYNTAX_ERROR');
 
   const caps = new Capabilities(mission.uses);
   const budget = new Budget(mission.budget);
@@ -98,7 +98,7 @@ class Interp {
       }
       case 'for': {
         const list = await this.eval(s.list, scopes);
-        if (!Array.isArray(list)) throw new SuperError(`« for » attend une liste, ligne ${s.line}`);
+        if (!Array.isArray(list)) throw new SuperError(`« for » attend une liste, ligne ${s.line}`, 'NOT_A_LIST');
         for (const item of list) {
           const inner = new Map([[s.name, item]]);
           await this.execBlock(s.body, [...scopes, inner]);
@@ -131,9 +131,9 @@ class Interp {
         return;
       }
       case 'done': throw new DoneSignal();
-      case 'fail': throw new SuperError(String(await this.eval(s.value, scopes)));
+      case 'fail': throw new SuperError(String(await this.eval(s.value, scopes)), 'MISSION_FAILED');
       case 'expr': { await this.eval(s.value, scopes); return; }
-      default: throw new SuperError(`instruction inconnue : ${s.kind}`);
+      default: throw new SuperError(`instruction inconnue : ${s.kind}`, 'INTERNAL');
     }
   }
 
@@ -155,12 +155,12 @@ class Interp {
         for (let i = scopes.length - 1; i >= 0; i--) if (scopes[i].has(n.name)) return scopes[i].get(n.name);
         if (this.skillDefs.has(n.name)) return { __skill: n.name };
         if (n.name in BUILTINS) return { __builtin: n.name };
-        throw new SuperError(`« ${n.name} » n'est pas défini (ligne ${n.line})`);
+        throw new SuperError(`« ${n.name} » n'est pas défini (ligne ${n.line})`, 'UNDEFINED_NAME');
       }
 
       case 'it': {
         for (let i = scopes.length - 1; i >= 0; i--) if (scopes[i].has('it')) return scopes[i].get('it');
-        throw new SuperError('« it » n\'a de sens que dans un where ou un map');
+        throw new SuperError('« it » n\'a de sens que dans un where ou un map', 'UNDEFINED_NAME');
       }
 
       case 'list': {
@@ -240,13 +240,13 @@ class Interp {
         return runAsk(this.ctx, this.opts.provider, prompt, args, n.type);
       }
 
-      default: throw new SuperError(`expression inconnue : ${n.kind}`);
+      default: throw new SuperError(`expression inconnue : ${n.kind}`, 'INTERNAL');
     }
   }
 
   private async expectList(node: Node, scopes: Scope[], op: string): Promise<any[]> {
     const list = await this.eval(node, scopes);
-    if (!Array.isArray(list)) throw new SuperError(`« ${op} » attend une liste, reçu ${typeName(list)}`);
+    if (!Array.isArray(list)) throw new SuperError(`« ${op} » attend une liste, reçu ${typeName(list)}`, 'NOT_A_LIST');
     return list;
   }
 
@@ -276,7 +276,7 @@ class Interp {
       case '>': return a > b;
       case '<=': return a <= b;
       case '>=': return a >= b;
-      default: throw new SuperError(`opérateur inconnu : ${n.op}`);
+      default: throw new SuperError(`opérateur inconnu : ${n.op}`, 'INTERNAL');
     }
   }
 
@@ -294,7 +294,7 @@ class Interp {
       if (name === 'now') return this.ctx.journal.perform('now', 'now', async () => new Date().toISOString());
       return BUILTINS[name](...args);
     }
-    throw new SuperError(`ceci n'est pas appelable (ligne ${line})`);
+    throw new SuperError(`ceci n'est pas appelable (ligne ${line})`, 'NOT_CALLABLE');
   }
 
   /** Point d'arrêt humain : l'effet ne part pas tant qu'il n'est pas approuvé. */
@@ -333,9 +333,17 @@ function truncate(s: string, n: number): string {
   return s.length <= n ? s : s.slice(0, n) + `… (+${s.length - n} car.)`;
 }
 
+// Un texte est une suite de points de code Unicode, jamais d'unités UTF-16 ni
+// d'octets. Sans cette règle, « len("👍") » vaudrait 2 en JavaScript, 1 en
+// Python et 4 en Rust, et trois implémentations correctes se contrediraient.
+const points = (s: string) => Array.from(s);
+
 const BUILTINS: Record<string, (...a: any[]) => any> = {
-  len: (x) => (x === null || x === undefined ? 0 : typeof x === 'string' || Array.isArray(x) ? x.length : Object.keys(x).length),
-  slice: (l, a, b) => (typeof l === 'string' ? l.slice(a, b) : (l ?? []).slice(a, b)),
+  len: (x) => (x === null || x === undefined ? 0
+    : typeof x === 'string' ? points(x).length
+    : Array.isArray(x) ? x.length
+    : Object.keys(x).length),
+  slice: (l, a, b) => (typeof l === 'string' ? points(l).slice(a, b).join('') : (l ?? []).slice(a, b)),
   join: (l, sep) => (l ?? []).map(stringify).join(sep ?? ''),
   split: (t, sep) => String(t).split(sep),
   upper: (t) => String(t).toUpperCase(),

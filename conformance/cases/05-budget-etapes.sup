@@ -1,0 +1,7 @@
+mission m {
+  uses file.write("**")
+  budget 2 steps
+  let a = !file.write("a.txt", "1")
+  let b = !file.write("b.txt", "2")
+  let c = !file.write("c.txt", "3")
+}

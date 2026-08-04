@@ -1,0 +1,4 @@
+mission m {
+  budget 5 steps
+  repeat { log "encore" } until false
+}

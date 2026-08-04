@@ -1,0 +1,6 @@
+mission m {
+  log "{len("héllo")}"
+  log "{len("👍")}"
+  log "{upper("café")}"
+  log "{slice("héllo", 0, 2)}"
+}

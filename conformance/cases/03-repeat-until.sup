@@ -1,0 +1,10 @@
+mission m {
+  budget 20 steps
+  let n = 0
+  let acc = []
+  repeat {
+    let n = n + 1
+    let acc = acc + [n * 10]
+  } until n >= 3
+  log "{join(acc, ",")} ({len(acc)})"
+}

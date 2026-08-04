@@ -1,0 +1,3 @@
+mission m {
+  repeat { log "x" } until true
+}

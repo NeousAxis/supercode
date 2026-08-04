@@ -1,0 +1,4 @@
+mission m {
+  let x = "pas une liste"
+  log "{join(x where it > 1, ",")}"
+}

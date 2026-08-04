@@ -1,0 +1,5 @@
+mission m {
+  uses file.write("autorise/**")
+  let x = !file.write("interdit/secret.txt", "hop")
+  log "jamais atteint"
+}

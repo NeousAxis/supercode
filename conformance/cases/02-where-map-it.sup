@@ -1,0 +1,6 @@
+mission m {
+  let n = [1, 2, 3, 4, 5]
+  log "{join(n where it > 2 map it * 2, ",")}"
+  let gens = [{nom: "Ada", age: 36}, {nom: "Alan", age: 41}]
+  log "{join(gens where .age > 40 map .nom, ",")}"
+}

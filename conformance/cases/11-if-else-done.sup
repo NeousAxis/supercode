@@ -1,0 +1,6 @@
+mission m {
+  if len([1,2]) == 2 { log "deux" } else { log "pas deux" }
+  if not false and true { log "logique" }
+  done
+  log "jamais atteint"
+}

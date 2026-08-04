@@ -1,0 +1,4 @@
+mission m {
+  let x = "coucou"
+  confirm x
+}

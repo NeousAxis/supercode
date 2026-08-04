@@ -152,11 +152,26 @@ environnement, donc même une évasion n'y trouverait aucune clé.
 | `!fs.graph(motif)` | `fs.graph("motif")` | `{fichiers: [{chemin, ext, octets, lignes}], liens: [{de, vers}]}` |
 | `!file.read(chemin)` | `file.read("motif")` | texte |
 | `!file.write(chemin, contenu)` | `file.write("motif")` | chemin écrit |
-| `!file.append(chemin, contenu)` | `file.write("motif")` | chemin écrit |
+| `!file.append(chemin, contenu)` | `file.append("motif")` | chemin écrit |
 
-Les motifs de capacité acceptent `*` (un segment) et `**` (tout le reste).
+Règle sans exception : un effet `!ns.op(...)` exige la capacité `ns.op`. Les
+motifs acceptent `*` (un segment) et `**` (tout le reste), et sont comparés au
+premier argument de l'effet.
 
-## 9. Lexique
+## 9. Nombres
+
+Il n'y a qu'un seul type numérique. Un nombre dont la valeur est entière s'écrit
+**sans partie décimale**, partout : dans un texte interpolé, dans `to_json`, et
+dans toute sérialisation. `3 / 1` s'écrit `3`, jamais `3.0`. Sans cette règle,
+deux implémentations correctes produiraient des sorties différentes.
+
+## 10. Textes
+
+Un texte est une suite de **points de code Unicode**. Ni des unités UTF-16, ni
+des octets. `len("👍")` vaut 1, et `slice` découpe par points de code. Sans cette
+règle, trois implémentations correctes répondraient 2, 1 et 4.
+
+## 11. Lexique
 
 Commentaires : `#` jusqu'à la fin de la ligne.
 Textes : `"..."` avec interpolation `{expr}`, échappements `\"` `\\` `\n` `\{`.

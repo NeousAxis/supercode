@@ -1,0 +1,7 @@
+mission m {
+  uses file.write("out/**"), file.read("out/**"), file.append("out/**")
+  let p = !file.write("out/note.md", "# titre\n\ncorps\n")
+  log "{len(!file.read("out/note.md"))} caractères dans {p}"
+  let q = !file.append("out/note.md", "ajout\n")
+  log "{len(!file.read("out/note.md"))} après ajout"
+}

@@ -72,6 +72,7 @@ async function main() {
   if (cmd === 'approve') return cmdApprove(positional[1], dir);
   if (cmd === 'run') return cmdRun(positional[1], positional[2], flags, dir);
   if (cmd === 'watch') return cmdWatch(positional[1], positional[2], flags, dir);
+  if (cmd === 'conform') return cmdConform(positional[1], flags);
 
   console.error(C.red(`commande inconnue : ${cmd}`));
   console.log(USAGE);
@@ -141,6 +142,60 @@ async function cmdWrite(demande: string, flags: Flags, dir: string) {
   } else {
     console.log(source);
   }
+}
+
+/**
+ * Mode conformité : le seul point de contact entre le langage et une
+ * implémentation.
+ *
+ * Exécute la première mission d'un fichier et n'écrit sur la sortie standard
+ * qu'un unique objet JSON, sans couleur, sans identifiant de run, sans horodatage.
+ * Une autre implémentation de Super Code, écrite dans n'importe quel langage,
+ * n'a qu'à produire le même objet pour prouver qu'elle est conforme.
+ *
+ * Voir conformance/CONTRACT.md.
+ */
+async function cmdConform(file: string, flags: Flags) {
+  const workdir = typeof flags.dir === 'string' ? flags.dir : path.dirname(path.resolve(file));
+  const etat = path.join(workdir, '.super');
+  const logs: string[] = [];
+
+  let sortie: any;
+  try {
+    const program = loadProgram(file);
+    await runMission(program, null, {
+      cwd: workdir,
+      dir: etat,
+      runId: 'conform',
+      provider: pickProvider({ provider: 'fixtures', fixtures: path.join(workdir, 'fixtures.json') }),
+      autoApprove: true,
+      log: (m) => logs.push(m),
+    });
+    sortie = { logs, error: null, files: listerFichiers(workdir) };
+  } catch (e) {
+    const code = (e as any).code ?? 'INTERNAL';
+    sortie = { logs, error: { code }, files: listerFichiers(workdir) };
+  }
+  // Rien d'autre ne doit sortir sur stdout : c'est ce qui rend la sortie
+  // comparable entre deux implémentations.
+  process.stdout.write(JSON.stringify(sortie, null, 2) + '\n');
+}
+
+/** Fichiers produits par la mission, triés, hors état interne. */
+function listerFichiers(racine: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const parcourir = (dir: string) => {
+    for (const e of readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      if (e.name === '.super' || e.name === 'fixtures.json') continue;
+      const complet = path.join(dir, e.name);
+      const relatif = path.relative(racine, complet);
+      if (e.isDirectory()) { parcourir(complet); continue; }
+      if (relatif.endsWith('.sup') || relatif.endsWith('.expected.json')) continue;
+      try { out[relatif] = readFileSync(complet, 'utf8'); } catch { /* binaire : ignoré */ }
+    }
+  };
+  parcourir(racine);
+  return out;
 }
 
 function validate(source: string): string | null {

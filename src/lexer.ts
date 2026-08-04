@@ -28,6 +28,7 @@ const SYMBOLS = [
 const DURATION_UNITS: Record<string, number> = { ms: 1, s: 1000, min: 60000, h: 3600000, d: 86400000 };
 
 export class SuperSyntaxError extends Error {
+  readonly code = 'SYNTAX_ERROR';
   line: number;
   col: number;
   constructor(msg: string, line: number, col: number) {

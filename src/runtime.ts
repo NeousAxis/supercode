@@ -7,8 +7,35 @@ import { existsSync, mkdirSync, appendFileSync, readFileSync, writeFileSync } fr
 import * as path from 'node:path';
 import { IsolatedSandbox } from './sandbox.ts';
 
+/**
+ * Codes d'erreur stables.
+ *
+ * Deux implémentations de Super Code n'écriront jamais le même message, et il
+ * serait absurde de leur imposer une langue. Elles doivent en revanche
+ * s'accorder sur *quelle* erreur s'est produite : c'est ce que le code désigne,
+ * et c'est ce que la suite de conformité compare.
+ */
+export type ErrorCode =
+  | 'SYNTAX_ERROR'        // le programme ne se lit pas
+  | 'CAPABILITY_DENIED'   // un effet sort du périmètre déclaré par « uses »
+  | 'BUDGET_EXCEEDED'     // argent, étapes ou durée épuisés
+  | 'TYPE_ERROR'          // une valeur ne correspond pas au type déclaré
+  | 'UNDEFINED_NAME'      // nom inconnu
+  | 'NOT_CALLABLE'        // appel de quelque chose qui n'est pas appelable
+  | 'NOT_A_LIST'          // where, map ou for sur autre chose qu'une liste
+  | 'EFFECT_FAILED'       // l'effet a été autorisé mais a échoué
+  | 'SKILL_FAILED'        // le code d'un skill a échoué ou été refusé
+  | 'MISSION_FAILED'      // l'instruction « fail »
+  | 'MODEL_FAILED'        // le modèle n'a pas produit de valeur exploitable
+  | 'INTERNAL';           // tout le reste
+
 export class SuperError extends Error {
-  constructor(msg: string) { super(msg); this.name = 'SuperError'; }
+  code: ErrorCode;
+  constructor(msg: string, code: ErrorCode = 'INTERNAL') {
+    super(msg);
+    this.name = 'SuperError';
+    this.code = code;
+  }
 }
 
 /** Levée quand la mission attend une approbation humaine. Ce n'est pas un échec. */
@@ -23,8 +50,12 @@ export class NeedsApproval extends Error {
   }
 }
 
-export class BudgetExceeded extends SuperError {}
-export class CapabilityDenied extends SuperError {}
+export class BudgetExceeded extends SuperError {
+  constructor(msg: string) { super(msg, 'BUDGET_EXCEEDED'); }
+}
+export class CapabilityDenied extends SuperError {
+  constructor(msg: string) { super(msg, 'CAPABILITY_DENIED'); }
+}
 
 export function sha(x: unknown): string {
   return createHash('sha256').update(typeof x === 'string' ? x : JSON.stringify(x)).digest('hex').slice(0, 16);
@@ -209,7 +240,7 @@ export class ApiProvider implements ModelProvider {
     });
     if (!res.ok) throw new SuperError(`API Anthropic ${res.status} : ${(await res.text()).slice(0, 300)}`);
     const body: any = await res.json();
-    if (body.stop_reason === 'refusal') throw new SuperError('le modèle a refusé cette requête');
+    if (body.stop_reason === 'refusal') throw new SuperError('le modèle a refusé cette requête', 'MODEL_FAILED');
     const text = (body.content ?? [])
       .filter((b: any) => b.type === 'text').map((b: any) => b.text).join('');
     const u = body.usage ?? {};
@@ -417,14 +448,14 @@ export async function runEffect(
         if (attempt < retries) await sleep(300 * 2 ** attempt);
       }
     }
-    throw new SuperError(`!${ns}.${op} a échoué après ${retries + 1} tentative(s) : ${(lastErr as Error).message}`);
+    throw new SuperError(`!${ns}.${op} a échoué après ${retries + 1} tentative(s) : ${(lastErr as Error).message}`, 'EFFECT_FAILED');
   });
 }
 
 async function doEffect(ctx: EffectContext, ns: string, op: string, args: any[]): Promise<any> {
   if (ns === 'net' && op === 'get') {
     const res = await fetch(String(args[0]), { headers: { 'user-agent': 'super/0.1' } });
-    if (!res.ok) throw new SuperError(`HTTP ${res.status} sur ${args[0]}`);
+    if (!res.ok) throw new SuperError(`HTTP ${res.status} sur ${args[0]}`, 'EFFECT_FAILED');
     const body = await res.text();
     const ct = res.headers.get('content-type') ?? '';
     if (ct.includes('json')) { try { return JSON.parse(body); } catch { return body; } }
@@ -443,7 +474,7 @@ async function doEffect(ctx: EffectContext, ns: string, op: string, args: any[])
       body: estTexte ? corps : JSON.stringify(corps ?? {}),
     });
     const texte = await res.text();
-    if (!res.ok) throw new SuperError(`HTTP ${res.status} sur POST ${url} : ${texte.slice(0, 200)}`);
+    if (!res.ok) throw new SuperError(`HTTP ${res.status} sur POST ${url} : ${texte.slice(0, 200)}`, 'EFFECT_FAILED');
     const ct = res.headers.get('content-type') ?? '';
     if (ct.includes('json')) { try { return JSON.parse(texte); } catch { return texte; } }
     return texte;
@@ -460,7 +491,7 @@ async function doEffect(ctx: EffectContext, ns: string, op: string, args: any[])
     else await fs.appendFile(p, content);
     return String(args[0]);
   }
-  throw new SuperError(`effet inconnu : !${ns}.${op}`);
+  throw new SuperError(`effet inconnu : !${ns}.${op}`, 'SYNTAX_ERROR');
 }
 
 const IGNORE = new Set(['node_modules', '.git', '.super', 'out', 'dist', 'build', '.next', 'coverage']);
@@ -533,7 +564,7 @@ function withTimeout<T>(p: Promise<T>, ms: number | null): Promise<T> {
   if (ms === null) return p;
   return Promise.race([
     p,
-    new Promise<T>((_, rej) => setTimeout(() => rej(new SuperError(`délai de ${ms}ms dépassé`)), ms)),
+    new Promise<T>((_, rej) => setTimeout(() => rej(new SuperError(`délai de ${ms}ms dépassé`, 'EFFECT_FAILED')), ms)),
   ]);
 }
 
@@ -581,7 +612,7 @@ export async function runAsk(
     ctx.budget.charge(repair.usd, '~modèle (réparation)');
     parsed = tryParseJson(repair.text, type);
     if (parsed.ok) return parsed.value;
-    throw new SuperError(`le modèle n'a pas produit de ${typeDesc} valide : ${parsed.error}`);
+    throw new SuperError(`le modèle n'a pas produit de ${typeDesc} valide : ${parsed.error}`, 'TYPE_ERROR');
   });
 }
 
@@ -735,10 +766,10 @@ export class SkillRegistry {
       try {
         out = await this.sandbox.call(src, args);
       } catch (e) {
-        throw new SuperError(`le skill « ${def.name} » a échoué : ${(e as Error).message}`);
+        throw new SuperError(`le skill « ${def.name} » a échoué : ${(e as Error).message}`, 'SKILL_FAILED');
       }
       const err = typeError(out, def.ret, `${def.name}(...)`);
-      if (err) throw new SuperError(`le skill « ${def.name} » a renvoyé une valeur hors type : ${err}`);
+      if (err) throw new SuperError(`le skill « ${def.name} » a renvoyé une valeur hors type : ${err}`, 'TYPE_ERROR');
       return out;
     }
     // Pas de code possible : on retombe sur un appel au modèle, à chaque appel.
@@ -759,7 +790,7 @@ export class SkillRegistry {
       // Le code en cache n'est exécuté que si son empreinte correspond à celle
       // enregistrée au moment où il a été synthétisé et testé.
       const refus = this.manifest.verify(fileName, src);
-      if (refus) throw new SuperError(refus);
+      if (refus) throw new SuperError(refus, 'SKILL_FAILED');
       this.compiled.set(def.name, src);
       return src;
     }
