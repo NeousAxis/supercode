@@ -81,6 +81,15 @@ qui n'atteint jamais son objectif s'arrête donc sur le budget, avec un message
 clair, jamais sur une facture ouverte. La borne est dans le langage, pas dans la
 discipline de celui qui écrit.
 
+### `!net.post` — atteindre les API du monde
+
+```
+let r = !net.post("https://api.exemple.com/hook", { message: contenu }) retry 2 timeout 15s
+```
+
+Le corps part en JSON, ou en texte si tu passes du texte. Troisième argument
+optionnel pour les en-têtes. Slack, Notion, ton propre backend, les webhooks.
+
 ### `!fs.graph` — un index de fichiers à parcourir
 
 ```
@@ -121,9 +130,11 @@ skill domaine(url: text) -> text {
 }
 ```
 
-Au premier appel, le modèle écrit l'implémentation. Elle est exécutée dans un bac
-à sable sans réseau, sans disque, sans `require` et sans `process`, testée sur
-l'entrée réelle, vérifiée contre le type déclaré, puis mise en cache. **Tous les
+Au premier appel, le modèle écrit l'implémentation. Elle part dans un processus
+séparé, lancé avec le modèle de permissions de Node, un contexte `vm` vide et un
+environnement vide : ni disque, ni sous-processus, ni réseau, et aucune clé d'API
+à voler même en cas d'évasion. Elle y est testée sur l'entrée réelle, vérifiée
+contre le type déclaré, puis mise en cache. **Tous les
 appels suivants sont du code pur : zéro token, zéro latence, résultat
 identique.** Si l'abstraction n'est pas exprimable en code déterministe, elle
 reste un appel au modèle et le dit.
@@ -172,6 +183,21 @@ Parler ces formats HTTP n'est pas « apprendre leur langage » : c'est un pilote
 quarante lignes, écrit une fois, pour causer à une machine qu'on ne possède pas.
 Ce qui compte est dans l'autre sens, et c'est `super write`.
 
+## `every 6h` planifie vraiment
+
+```bash
+super watch missions/veille.sup
+```
+
+Chaque déclenchement est un run à part entière, avec son propre journal : un
+plantage n'emporte que le tour en cours, et se reprend. Un tour raté est signalé
+et n'interrompt pas la planification, parce qu'un agent de veille ne doit pas
+mourir parce qu'une API a hoqueté une fois. Un point d'arrêt met ce tour en
+attente sans tuer les suivants.
+
+`super watch` tourne au premier plan. Pour du vrai arrière-plan, enveloppe-le
+dans launchd, systemd ou cron.
+
 ## Prendre en main
 
 Node 22.6 ou plus récent. Aucune dépendance à installer.
@@ -179,7 +205,7 @@ Node 22.6 ou plus récent. Aucune dépendance à installer.
 ```bash
 node src/cli.ts check missions/veille.sup       # vérifie syntaxe, capacités, budget
 node src/cli.ts run   missions/hello.sup        # la mission minimale
-node test/run.ts                                # 22 tests, sans réseau
+node test/run.ts                                # 24 tests, sans réseau
 ```
 
 Démonstration complète, hors ligne, avec des réponses de modèle enregistrées :
@@ -211,18 +237,20 @@ node src/cli.ts run missions/veille.sup --provider cli
 |---|---|
 | `super check <f.sup>` | vérifie la syntaxe, affiche capacités et budget |
 | `super run <f.sup> [mission]` | exécute |
+| `super watch <f.sup> [mission]` | relance la mission à son intervalle `every` |
+| `super write "<demande>" -o <f.sup>` | fait écrire la mission par le modèle |
 | `super runs` | liste les runs et ceux qui attendent une approbation |
 | `super trust [--yes]` | ré-approuve le code des skills modifié après relecture |
 | `super approve <runId>` | approuve le point d'arrêt en attente |
 
-Options : `--provider api\|cli\|fixtures`, `--fixtures <f>`, `--resume <runId>`,
-`--yes`, `--dir <chemin>`.
+Options : `--provider`, `--model`, `--base-url`, `--fixtures`, `--resume`,
+`--every`, `--once`, `--yes`, `--dir`.
 
 ## Ce qui est vérifié, et ce qui ne l'est pas
 
 Vérifié de bout en bout sur cette machine :
 
-- l'analyse, l'interprétation, les 13 tests ;
+- l'analyse, l'interprétation, les 24 tests ;
 - les effets réseau réels (11 appels à l'API Hacker News) et leur journalisation ;
 - la reprise : un run repris rejoue les étapes sans refaire un seul appel ;
 - le point d'arrêt : le fichier n'est pas écrit tant que l'approbation manque ;
@@ -234,23 +262,30 @@ Vérifié de bout en bout sur cette machine :
   budget borné ;
 - `!fs.graph` sur un vrai dépôt, et un audit fichier par fichier bouclé avec
   LongCat de bout en bout ;
-- la reprise après un journal tronqué par un crash.
+- la reprise après un journal tronqué par un crash ;
+- le refus, depuis l'intérieur du bac à sable, de `require`, `process` et
+  `fetch`, et un skill qui boucle sans fin coupé au lieu de bloquer la mission ;
+- `!net.post` contre un vrai service, et `super watch` enchaînant trois tours
+  planifiés, chacun avec son journal ;
+- `super write` : LongCat a écrit une mission Super Code valide à partir de la
+  seule grammaire, elle a tourné, et le point d'arrêt a tenu.
 
-**Non vérifié ici :** les appels à un vrai modèle. La machine n'a ni
-`ANTHROPIC_API_KEY`, ni session `claude` utilisable depuis un sous-processus. Les
-deux fournisseurs sont écrits mais n'ont pas tourné. Dans la démonstration hors
-ligne, le contenu des réponses vient de `examples/fixtures.json`, donc le code du
-skill `domaine` a été écrit à la main, pas par un modèle. Toute la mécanique
-autour, elle, est réelle.
+**Non vérifié :** le fournisseur `api` (Anthropic) et le fournisseur `cli`. La
+machine n'a pas de `ANTHROPIC_API_KEY`, et `claude -p` renvoie 401 depuis un
+sous-processus. Les deux sont écrits mais n'ont pas tourné. Le fournisseur
+`longcat`, lui, a tout validé.
 
 ## Limites connues de la v0.1
 
-- Le bac à sable des skills repose sur `node:vm`, qui isole les globales mais
-  n'est pas une frontière de sécurité contre du code hostile. Suffisant pour du
-  code écrit par un modèle sur ta propre machine, pas pour du code non fiable.
-- `every 6h` est déclaratif : rien ne planifie encore les missions.
-- Pas de fonctions définies par l'utilisateur en dehors des skills.
-- Effets limités à `net.get`, `file.read`, `file.write`, `file.append`.
+- Le code d'un skill tourne dans un processus séparé, sous le modèle de
+  permissions de Node et sans environnement : il n'atteint ni le disque, ni un
+  sous-processus, ni tes clés. C'est une vraie frontière contre le code
+  accidentel et contre la plupart du code malveillant. Ce n'en est pas une
+  contre un exploit de V8 : rien d'écrit en JavaScript ne l'est.
+- Pas de fonctions définies par l'utilisateur en dehors des skills, pas de
+  récursion, pas de `while`. C'est volontaire : chaque ajout coûte une ligne de
+  grammaire, et la grammaire doit continuer à tenir dans un prompt système.
+- `super watch` tourne au premier plan.
 - Le journal est un fichier par run, sans compaction.
 
 ## Organisation
@@ -261,6 +296,7 @@ src/lexer.ts      analyse lexicale
 src/parser.ts     analyse syntaxique
 src/interp.ts     interpréteur
 src/runtime.ts    journal, capacités, budget, effets, modèle, skills
+src/sandbox.ts    bac à sable isolé pour le code des skills
 src/cli.ts        ligne de commande
 test/run.ts       tests
 missions/         exemples exécutables

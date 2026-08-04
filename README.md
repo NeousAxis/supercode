@@ -104,11 +104,20 @@ budget 1.00usd, 60 steps, 3min
 
 Money, steps, or time: whichever runs out stops the mission.
 
+### `!net.post` reaches the rest of the world
+
+```
+let r = !net.post("https://api.example.com/hook", { message: content }) retry 2 timeout 15s
+```
+
+The body goes out as JSON, or as text if you pass text. An optional third
+argument carries headers. Slack, Notion, your own backend, webhooks.
+
 ### `!fs.graph` gives you an index of files to walk
 
 ```
 let g = !fs.graph("src/**")
-let targets = g.fichiers where .ext == ".ts" map .chemin
+let targets = g.fichiers where .ext == ".ts" map .chemin   // fields are French for now
 ```
 
 Returns a flat record: the file list and their import links. Flat so it reads at
@@ -128,8 +137,8 @@ skill domain(url: text) -> text {
 On the first call the model writes the implementation. It runs in a separate
 process with Node permission model, an empty vm context and an empty
 environment, so it reaches no disk, no subprocess, no network and none of your
-API keys. It is tested against the real
-input, checked against the declared type, then cached. **Every later call is pure
+API keys. It is tested against the real input, checked against the declared
+type, then cached. **Every later call is pure
 code: zero tokens, zero latency, identical result.** If the abstraction cannot be
 expressed as deterministic code, it stays a model call and says so.
 
@@ -172,6 +181,20 @@ blocked (`confirm`). You review fifteen declarative lines, not a script.
 Speaking those HTTP shapes is not "learning their language": it is a forty-line
 driver, written once, to talk to a machine you do not own. What matters runs the
 other way, and that is `super write`.
+
+## `every 6h` actually schedules
+
+```bash
+super watch missions/veille.sup
+```
+
+Each firing is a full run with its own journal, so a crash costs only the turn in
+flight and resumes. A failed turn is reported and does not stop the schedule: a
+watch agent must not die because an API hiccupped once. An approval gate parks
+that turn without killing the following ones.
+
+`super watch` runs in the foreground. For real background scheduling, wrap it in
+launchd, systemd or cron.
 
 ## Getting started
 
@@ -255,6 +278,7 @@ src/lexer.ts      lexing
 src/parser.ts     parsing
 src/interp.ts     interpreter
 src/runtime.ts    journal, capabilities, budget, effects, providers, skills
+src/sandbox.ts    isolated sandbox for skill code
 src/cli.ts        command line
 test/run.ts       tests
 missions/         runnable examples
